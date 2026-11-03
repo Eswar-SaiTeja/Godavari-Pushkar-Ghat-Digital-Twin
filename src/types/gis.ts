@@ -73,6 +73,18 @@ export type TerrainProviderType =
   | 'ellipsoid_fallback'
   | 'synthetic_dem_grid';
 
+export type LightingPreset = 
+  | 'DAY' 
+  | 'SUNSET_HARATHI' 
+  | 'NIGHT_COMMAND';
+
+export interface MeasurementState {
+  isActive: boolean;
+  startPoint: { longitude: number; latitude: number; height: number } | null;
+  endPoint: { longitude: number; latitude: number; height: number } | null;
+  distanceMeters: number | null;
+}
+
 export interface LayerVisibilityState {
   boundaries: boolean;
   ghats: boolean;

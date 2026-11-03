@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   X, 
   Send, 
@@ -7,7 +7,8 @@ import {
   Compass, 
   BookOpen, 
   AlertTriangle,
-  Maximize2
+  Maximize2,
+  Search
 } from 'lucide-react';
 import { GhatLocation } from '../../types/gis';
 import { GHAT_LOCATIONS } from '../../config/locations';
@@ -25,6 +26,9 @@ export const LocationInfoPanel: React.FC<LocationInfoPanelProps> = ({
   onSelectLocation,
   onClose,
 }) => {
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
   if (!selectedLocation) return null;
 
   const currentOccupancyPct = Math.round(
@@ -46,14 +50,21 @@ export const LocationInfoPanel: React.FC<LocationInfoPanelProps> = ({
     cesiumService.flyToLocation(selectedLocation);
   };
 
+  const filteredLocations = GHAT_LOCATIONS.filter(loc => {
+    const matchesSearch = loc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (loc.teluguName && loc.teluguName.includes(searchQuery));
+    const matchesCategory = categoryFilter === 'all' || loc.category === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+
   return (
     <div className="fixed top-20 right-4 z-30 w-88 md:w-96 max-h-[calc(100vh-6.5rem)] glass-panel rounded-2xl border border-cyan-500/30 flex flex-col shadow-panel overflow-hidden select-none animate-in fade-in slide-in-from-right-4 duration-300">
-      {/* Top Banner: Quick Location Jump Chips */}
-      <div className="bg-slate-950/70 p-2.5 border-b border-slate-800/80">
-        <div className="flex items-center justify-between mb-1.5">
+      {/* Top Banner: Quick Location Jump Chips & Filter */}
+      <div className="bg-slate-950/70 p-2.5 border-b border-slate-800/80 space-y-2">
+        <div className="flex items-center justify-between">
           <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1">
             <Compass className="w-3 h-3 text-cyan-400" />
-            Quick Ghat Selector
+            Ghat & Landmark Directory
           </span>
           <button
             onClick={onClose}
@@ -64,9 +75,38 @@ export const LocationInfoPanel: React.FC<LocationInfoPanelProps> = ({
           </button>
         </div>
 
+        {/* Search Input */}
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search ghats, temples, rescue posts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-8 pr-3 py-1 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] text-slate-200 placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-400/50"
+          />
+        </div>
+
+        {/* Category Filter Chips */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar text-[10px] font-mono">
+          {['all', 'ghat', 'emergency', 'command'].map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setCategoryFilter(cat)}
+              className={`px-2 py-0.5 rounded capitalize transition-all border ${
+                categoryFilter === cat
+                  ? 'bg-cyan-500/30 text-cyan-300 border-cyan-400/50 font-bold'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              {cat === 'all' ? 'All Sites' : cat}
+            </button>
+          ))}
+        </div>
+
         {/* Scrollable quick pills */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-          {GHAT_LOCATIONS.map((loc) => {
+          {filteredLocations.map((loc) => {
             const isCurrent = loc.id === selectedLocation.id;
             return (
               <button

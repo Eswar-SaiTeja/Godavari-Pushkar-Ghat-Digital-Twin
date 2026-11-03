@@ -8,8 +8,11 @@ import {
 import { 
   GhatLocation, 
   BaseImageryProvider, 
-  LayerVisibilityState 
+  LayerVisibilityState,
+  LightingPreset,
+  MeasurementState
 } from '../types/gis';
+import { SimulationMode } from '../types/simulation';
 
 // Initialize Cesium Ion token if available
 const ionToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
@@ -27,6 +30,11 @@ export class CesiumService {
   private demGridEntities: Cesium.Entity[] = [];
   private waterFlowEntities: Cesium.Entity[] = [];
   private crowdDensityEntities: Cesium.Entity[] = [];
+  private tourInterval: any = null;
+  private isMeasuring: boolean = false;
+  private measurePoints: Cesium.Cartesian3[] = [];
+  private measureEntities: Cesium.Entity[] = [];
+  private onMeasurementUpdate: ((state: MeasurementState) => void) | null = null;
   private terrainStatus: { hasWorldTerrain: boolean; message: string } = {
     hasWorldTerrain: false,
     message: 'WGS84 Ellipsoid (Fallback Mode Active)'
@@ -534,6 +542,16 @@ export class CesiumService {
     this.handler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
       if (!this.viewer) return;
 
+      // Check if distance measurement mode is active
+      if (this.isMeasuring) {
+        const ray = this.viewer.camera.getPickRay(click.position);
+        const cartesian = ray ? this.viewer.scene.globe.pick(ray, this.viewer.scene) : null;
+        if (cartesian) {
+          this.handleMeasurementPoint(cartesian);
+        }
+        return;
+      }
+
       const pickedObject = this.viewer.scene.pick(click.position);
       if (Cesium.defined(pickedObject) && pickedObject.id) {
         const entity = pickedObject.id as Cesium.Entity;
@@ -666,9 +684,304 @@ export class CesiumService {
   }
 
   /**
+   * Adjusts lighting preset for day, evening harathi, or night command mode
+   */
+  public setLightingPreset(preset: LightingPreset): void {
+    if (!this.viewer) return;
+
+    const baseDate = new Date();
+    baseDate.setUTCFullYear(2026, 10, 3);
+
+    if (preset === 'DAY') {
+      baseDate.setUTCHours(8, 30, 0); // 14:00 IST
+      this.viewer.scene.globe.enableLighting = true;
+      this.viewer.scene.fog.density = 0.0001;
+    } else if (preset === 'SUNSET_HARATHI') {
+      baseDate.setUTCHours(12, 45, 0); // 18:15 IST (sunset / harathi time)
+      this.viewer.scene.globe.enableLighting = true;
+      this.viewer.scene.fog.density = 0.00025;
+    } else if (preset === 'NIGHT_COMMAND') {
+      baseDate.setUTCHours(15, 30, 0); // 21:00 IST
+      this.viewer.scene.globe.enableLighting = true;
+      this.viewer.scene.fog.density = 0.00015;
+    }
+
+    this.viewer.clock.currentTime = Cesium.JulianDate.fromDate(baseDate);
+  }
+
+  /**
+   * Responds to simulation mode change with camera vantage adjustment
+   */
+  public flyToScenario(mode: SimulationMode): void {
+    if (!this.viewer) return;
+
+    if (mode === 'PUSHKARAM_PEAK') {
+      this.viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(81.7798, 16.9962, 380),
+        orientation: {
+          heading: Cesium.Math.toRadians(315),
+          pitch: Cesium.Math.toRadians(-32),
+          roll: 0,
+        },
+        duration: 2.2,
+      });
+    } else if (mode === 'MONSOON_FLOOD') {
+      this.viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(81.7920, 16.9750, 1200),
+        orientation: {
+          heading: Cesium.Math.toRadians(315),
+          pitch: Cesium.Math.toRadians(-26),
+          roll: 0,
+        },
+        duration: 2.2,
+      });
+    } else if (mode === 'EMERGENCY_EVAC') {
+      this.viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(81.7925, 17.0010, 750),
+        orientation: {
+          heading: Cesium.Math.toRadians(330),
+          pitch: Cesium.Math.toRadians(-38),
+          roll: 0,
+        },
+        duration: 2.2,
+      });
+    } else if (mode === 'VIP_MOVEMENT') {
+      this.viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(81.7810, 16.9950, 340),
+        orientation: {
+          heading: Cesium.Math.toRadians(325),
+          pitch: Cesium.Math.toRadians(-35),
+          roll: 0,
+        },
+        duration: 2.2,
+      });
+    } else {
+      this.flyToInitialPosition(true);
+    }
+  }
+
+  /**
+   * Automated Inspection Tour across key Godavari pushkar locations
+   */
+  public startTour(
+    onStepChange: (siteName: string, stepIdx: number) => void,
+    onComplete: () => void
+  ): void {
+    if (!this.viewer) return;
+    this.stopTour();
+
+    const tourStops = [
+      { name: 'Godavari Pushkar Ghat (Sacred Center)', pos: [81.7798, 16.9962, 380], h: 315, p: -32 },
+      { name: 'Three Historic Godavari Bridges', pos: [81.7950, 16.9720, 1250], h: 310, p: -30 },
+      { name: 'Kotilingala Bathing Ghat (570m)', pos: [81.7758, 17.0040, 480], h: 325, p: -30 },
+      { name: 'Saraswati Ghat & Harathi Pavilion', pos: [81.7695, 17.0100, 420], h: 310, p: -28 },
+      { name: 'Arts College Emergency Safe Zone', pos: [81.7915, 17.0025, 600], h: 335, p: -40 },
+    ];
+
+    let currentIdx = 0;
+
+    const executeStop = () => {
+      if (currentIdx >= tourStops.length) {
+        this.stopTour();
+        onComplete();
+        return;
+      }
+
+      const stop = tourStops[currentIdx];
+      onStepChange(stop.name, currentIdx + 1);
+
+      this.viewer!.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(stop.pos[0], stop.pos[1], stop.pos[2]),
+        orientation: {
+          heading: Cesium.Math.toRadians(stop.h),
+          pitch: Cesium.Math.toRadians(stop.p),
+          roll: 0,
+        },
+        duration: 2.8,
+      });
+
+      currentIdx++;
+    };
+
+    executeStop();
+    this.tourInterval = setInterval(executeStop, 6000);
+  }
+
+  public stopTour(): void {
+    if (this.tourInterval) {
+      clearInterval(this.tourInterval);
+      this.tourInterval = null;
+    }
+  }
+
+  /**
+   * Interactive Distance Ruler tool
+   */
+  public toggleMeasurement(onUpdate: (state: MeasurementState) => void): boolean {
+    if (this.isMeasuring) {
+      this.clearMeasurement();
+      return false;
+    } else {
+      this.startMeasurement(onUpdate);
+      return true;
+    }
+  }
+
+  public startMeasurement(onUpdate: (state: MeasurementState) => void): void {
+    this.clearMeasurement();
+    this.isMeasuring = true;
+    this.onMeasurementUpdate = onUpdate;
+    onUpdate({
+      isActive: true,
+      startPoint: null,
+      endPoint: null,
+      distanceMeters: null,
+    });
+  }
+
+  public clearMeasurement(): void {
+    this.isMeasuring = false;
+    this.measurePoints = [];
+    if (this.viewer) {
+      this.measureEntities.forEach(e => this.viewer!.entities.remove(e));
+    }
+    this.measureEntities = [];
+    if (this.onMeasurementUpdate) {
+      this.onMeasurementUpdate({
+        isActive: false,
+        startPoint: null,
+        endPoint: null,
+        distanceMeters: null,
+      });
+      this.onMeasurementUpdate = null;
+    }
+  }
+
+  private handleMeasurementPoint(cartesian: Cesium.Cartesian3): void {
+    if (!this.viewer) return;
+
+    const carto = Cesium.Cartographic.fromCartesian(cartesian);
+    const pointCoord = {
+      longitude: Cesium.Math.toDegrees(carto.longitude),
+      latitude: Cesium.Math.toDegrees(carto.latitude),
+      height: Math.round(carto.height),
+    };
+
+    if (this.measurePoints.length === 0) {
+      // First Point
+      this.measurePoints.push(cartesian);
+
+      const pt1 = this.viewer.entities.add({
+        position: cartesian,
+        point: {
+          pixelSize: 10,
+          color: Cesium.Color.fromCssColorString('#00f0ff'),
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+        },
+        label: {
+          text: 'START POINT',
+          font: '10px JetBrains Mono, monospace',
+          fillColor: Cesium.Color.fromCssColorString('#00f0ff'),
+          backgroundColor: Cesium.Color.fromCssColorString('#0a0f1d').withAlpha(0.85),
+          showBackground: true,
+          pixelOffset: new Cesium.Cartesian2(0, -14),
+        }
+      });
+      this.measureEntities.push(pt1);
+
+      if (this.onMeasurementUpdate) {
+        this.onMeasurementUpdate({
+          isActive: true,
+          startPoint: pointCoord,
+          endPoint: null,
+          distanceMeters: null,
+        });
+      }
+    } else {
+      // Second Point
+      const startCartesian = this.measurePoints[0];
+      const startCarto = Cesium.Cartographic.fromCartesian(startCartesian);
+      const startPointCoord = {
+        longitude: Cesium.Math.toDegrees(startCarto.longitude),
+        latitude: Cesium.Math.toDegrees(startCarto.latitude),
+        height: Math.round(startCarto.height),
+      };
+
+      this.measurePoints.push(cartesian);
+
+      const distance = Cesium.Cartesian3.distance(startCartesian, cartesian);
+
+      const pt2 = this.viewer.entities.add({
+        position: cartesian,
+        point: {
+          pixelSize: 10,
+          color: Cesium.Color.fromCssColorString('#f59e0b'),
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+        },
+        label: {
+          text: `END POINT (${Math.round(distance)}m)`,
+          font: '10px JetBrains Mono, monospace',
+          fillColor: Cesium.Color.fromCssColorString('#f59e0b'),
+          backgroundColor: Cesium.Color.fromCssColorString('#0a0f1d').withAlpha(0.85),
+          showBackground: true,
+          pixelOffset: new Cesium.Cartesian2(0, -14),
+        }
+      });
+      this.measureEntities.push(pt2);
+
+      // Connecting line
+      const line = this.viewer.entities.add({
+        polyline: {
+          positions: [startCartesian, cartesian],
+          width: 3,
+          material: new Cesium.PolylineDashMaterialProperty({
+            color: Cesium.Color.fromCssColorString('#00f0ff'),
+            dashLength: 12.0,
+          }),
+        }
+      });
+      this.measureEntities.push(line);
+
+      // Midpoint measurement label
+      const midPoint = Cesium.Cartesian3.midpoint(startCartesian, cartesian, new Cesium.Cartesian3());
+      const labelEntity = this.viewer.entities.add({
+        position: midPoint,
+        label: {
+          text: `DISTANCE: ${Math.round(distance).toLocaleString()} m (${(distance / 1000).toFixed(2)} km)`,
+          font: 'bold 12px JetBrains Mono, monospace',
+          fillColor: Cesium.Color.WHITE,
+          backgroundColor: Cesium.Color.fromCssColorString('#050811').withAlpha(0.9),
+          showBackground: true,
+          outlineColor: Cesium.Color.fromCssColorString('#00f0ff'),
+          outlineWidth: 2,
+          pixelOffset: new Cesium.Cartesian2(0, -20),
+        }
+      });
+      this.measureEntities.push(labelEntity);
+
+      if (this.onMeasurementUpdate) {
+        this.onMeasurementUpdate({
+          isActive: true,
+          startPoint: startPointCoord,
+          endPoint: pointCoord,
+          distanceMeters: Math.round(distance),
+        });
+      }
+
+      // Reset for next pair
+      this.measurePoints = [];
+    }
+  }
+
+  /**
    * Clean up Cesium resources on component unmount
    */
   public destroy(): void {
+    this.stopTour();
+    this.clearMeasurement();
+
     if (this.handler && !this.handler.isDestroyed()) {
       this.handler.destroy();
       this.handler = null;

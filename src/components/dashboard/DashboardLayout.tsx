@@ -14,7 +14,8 @@ import {
 } from '../../types/gis';
 import { 
   SidebarModuleId, 
-  ModuleDefinition
+  ModuleDefinition,
+  SimulationMode
 } from '../../types/simulation';
 import { GHAT_LOCATIONS } from '../../config/locations';
 import { cesiumService } from '../../services/cesiumService';
@@ -103,13 +104,25 @@ export const DashboardLayout: React.FC = () => {
     cesiumService.flyToInitialPosition();
   };
 
+  const handleSimulationModeChange = (mode: SimulationMode) => {
+    setSimulationMode(mode);
+    cesiumService.flyToScenario(mode);
+    if (mode === 'PUSHKARAM_PEAK') {
+      setLayers(prev => ({ ...prev, crowdDensityHeatmap: true, ghats: true }));
+    } else if (mode === 'MONSOON_FLOOD') {
+      setLayers(prev => ({ ...prev, waterFlowVectors: true, demElevationGrid: true }));
+    } else if (mode === 'EMERGENCY_EVAC') {
+      setLayers(prev => ({ ...prev, emergencyZones: true }));
+    }
+  };
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#050811] flex flex-col font-sans select-none">
       {/* 1. Top Header */}
       <TopHeader
         simulationTime={simulatedTime}
         simulationMode={simulationMode}
-        onSimulationModeChange={setSimulationMode}
+        onSimulationModeChange={handleSimulationModeChange}
         onResetMap={handleResetMap}
         onToggleLayersPanel={() => setIsLayersPanelOpen(prev => !prev)}
         isLayersPanelOpen={isLayersPanelOpen}
