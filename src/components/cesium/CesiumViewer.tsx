@@ -1,0 +1,166 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { cesiumService } from '../../services/cesiumService';
+import { GhatLocation, LayerVisibilityState } from '../../types/gis';
+import { CesiumNavigationControls } from './CesiumNavigationControls';
+import { Crosshair, Globe } from 'lucide-react';
+
+interface CesiumViewerProps {
+  layers: LayerVisibilityState;
+  onSelectLocation: (loc: GhatLocation | null) => void;
+  onTerrainStatusResolved: (status: { hasWorldTerrain: boolean; message: string }) => void;
+}
+
+export const CesiumViewer: React.FC<CesiumViewerProps> = ({
+  layers,
+  onSelectLocation,
+  onTerrainStatusResolved,
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [telemetry, setTelemetry] = useState<{
+    longitude: number;
+    latitude: number;
+    altitudeMeters: number;
+    headingDeg: number;
+    pitchDeg: number;
+  }>({
+    longitude: 81.7774,
+    latitude: 16.9984,
+    altitudeMeters: 1450,
+    headingDeg: 320,
+    pitchDeg: -38,
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [initError, setInitError] = useState<string | null>(null);
+
+  // Initialize Cesium Viewer
+  useEffect(() => {
+    let isMounted = true;
+    let telemetryTimer: any = null;
+
+    if (!containerRef.current) return;
+
+    cesiumService.initializeViewer(containerRef.current, (loc) => {
+      if (isMounted) {
+        onSelectLocation(loc);
+      }
+    })
+      .then(({ terrainStatus }) => {
+        if (!isMounted) return;
+        setIsLoading(false);
+        onTerrainStatusResolved(terrainStatus);
+
+        // Start telemetry polling for camera HUD
+        telemetryTimer = setInterval(() => {
+          const t = cesiumService.getCameraTelemetry();
+          if (t && isMounted) {
+            setTelemetry(t);
+          }
+        }, 300);
+      })
+      .catch((err) => {
+        console.error('[CesiumViewer] Failed to initialize Cesium Viewer:', err);
+        if (isMounted) {
+          setIsLoading(false);
+          setInitError('Failed to initialize Cesium 3D Globe: ' + (err?.message || err));
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      if (telemetryTimer) clearInterval(telemetryTimer);
+      cesiumService.destroy();
+    };
+  }, []);
+
+  // Update layer visibility when state changes
+  useEffect(() => {
+    cesiumService.updateLayerVisibility(layers);
+  }, [layers]);
+
+  return (
+    <div className="relative w-full h-full overflow-hidden bg-[#050811]">
+      {/* Cesium canvas container */}
+      <div 
+        ref={containerRef} 
+        className="w-full h-full cesium-viewer" 
+        style={{ width: '100%', height: '100%' }}
+      />
+
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-[#050811] flex flex-col items-center justify-center z-30">
+          <div className="relative flex items-center justify-center w-20 h-20 mb-4">
+            <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20 animate-ping-slow" />
+            <div className="absolute inset-0 rounded-full border-t-2 border-cyan-400 animate-spin" />
+            <Globe className="w-8 h-8 text-cyan-400 animate-pulse" />
+          </div>
+          <h2 className="text-sm font-mono font-bold text-cyan-300 tracking-wider uppercase mb-1">
+            Initializing Godavari 3D Digital Twin
+          </h2>
+          <p className="text-xs font-mono text-slate-400">
+            Centering Rajamahendravaram • Loading OSM & Terrain Providers...
+          </p>
+        </div>
+      )}
+
+      {/* Error Fallback */}
+      {initError && (
+        <div className="absolute inset-0 bg-[#050811]/95 flex flex-col items-center justify-center z-40 p-6 text-center">
+          <div className="text-rose-400 text-lg font-bold font-mono mb-2">
+            Cesium Initialization Alert
+          </div>
+          <p className="text-sm text-slate-300 max-w-md font-mono mb-4">
+            {initError}
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold rounded-lg text-xs"
+          >
+            Retry Globe Engine
+          </button>
+        </div>
+      )}
+
+      {/* Navigation Controls Component (Right side) */}
+      <CesiumNavigationControls 
+        headingDeg={telemetry.headingDeg}
+        pitchDeg={telemetry.pitchDeg}
+        altitudeMeters={telemetry.altitudeMeters}
+      />
+
+      {/* Bottom-Left Real-Time Spatial Telemetry HUD */}
+      <div className="absolute bottom-20 left-4 z-10 select-none hidden sm:block">
+        <div className="glass-panel px-3 py-1.5 rounded-xl border border-cyan-500/30 font-mono text-[10px] text-slate-300 shadow-panel flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-cyan-300">
+            <Crosshair className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+            <span className="font-bold">CAMERA HUD:</span>
+          </div>
+
+          <div>
+            <span className="text-slate-400">LAT:</span>{' '}
+            <span className="text-slate-100 font-semibold">{telemetry.latitude.toFixed(4)}° N</span>
+          </div>
+
+          <div>
+            <span className="text-slate-400">LON:</span>{' '}
+            <span className="text-slate-100 font-semibold">{telemetry.longitude.toFixed(4)}° E</span>
+          </div>
+
+          <div>
+            <span className="text-slate-400">ALT:</span>{' '}
+            <span className="text-cyan-400 font-semibold">
+              {telemetry.altitudeMeters > 1000 
+                ? `${(telemetry.altitudeMeters / 1000).toFixed(2)} km` 
+                : `${telemetry.altitudeMeters} m`}
+            </span>
+          </div>
+
+          <div>
+            <span className="text-slate-400">HDG:</span>{' '}
+            <span className="text-slate-100 font-semibold">{telemetry.headingDeg}°</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
