@@ -7,9 +7,12 @@ import {
   Activity, 
   Clock, 
   Menu, 
-  Sparkles,
-  Database,
-  Radio
+  Sparkles, 
+  Database, 
+  Radio,
+  Users,
+  Car,
+  BarChart3
 } from 'lucide-react';
 import { Badge } from '../common/Badge';
 import { SimulationMode } from '../../types/simulation';
@@ -23,6 +26,11 @@ interface TopHeaderProps {
   isLayersPanelOpen: boolean;
   onToggleSidebar: () => void;
   terrainStatusMessage: string;
+  onToggleCrowdPanel?: () => void;
+  isCrowdPanelOpen?: boolean;
+  onToggleTrafficPanel?: () => void;
+  isTrafficPanelOpen?: boolean;
+  onToggleScenarioModal?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -34,6 +42,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   isLayersPanelOpen,
   onToggleSidebar,
   terrainStatusMessage,
+  onToggleCrowdPanel,
+  isCrowdPanelOpen,
+  onToggleTrafficPanel,
+  isTrafficPanelOpen,
+  onToggleScenarioModal,
 }) => {
   const [isFullscreen, setIsFullscreen] = React.useState<boolean>(false);
 
@@ -185,6 +198,47 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5">
+          {onToggleCrowdPanel && (
+            <button
+              onClick={onToggleCrowdPanel}
+              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
+                isCrowdPanelOpen 
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/60 shadow-glow-sm' 
+                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-cyan-400 hover:border-cyan-500/40'
+              }`}
+              title="Toggle Crowd Simulation Controls"
+            >
+              <Users className="w-4 h-4 text-cyan-400" />
+              <span className="hidden lg:inline font-mono font-semibold">Crowd</span>
+            </button>
+          )}
+
+          {onToggleTrafficPanel && (
+            <button
+              onClick={onToggleTrafficPanel}
+              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
+                isTrafficPanelOpen 
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/60 shadow-glow-sm' 
+                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-emerald-400 hover:border-emerald-500/40'
+              }`}
+              title="Toggle Traffic Simulation Controls"
+            >
+              <Car className="w-4 h-4 text-emerald-400" />
+              <span className="hidden lg:inline font-mono font-semibold">Traffic</span>
+            </button>
+          )}
+
+          {onToggleScenarioModal && (
+            <button
+              onClick={onToggleScenarioModal}
+              className="p-2 rounded-lg bg-slate-800/80 text-slate-300 border border-slate-700/60 hover:text-amber-400 hover:border-amber-500/40 transition-colors flex items-center gap-1.5 text-xs"
+              title="Compare Evacuation Scenarios"
+            >
+              <BarChart3 className="w-4 h-4 text-amber-400" />
+              <span className="hidden lg:inline font-mono font-semibold">Scenarios</span>
+            </button>
+          )}
+
           <button
             onClick={onToggleLayersPanel}
             className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${

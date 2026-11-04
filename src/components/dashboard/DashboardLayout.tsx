@@ -211,6 +211,11 @@ export const DashboardLayout: React.FC = () => {
         isLayersPanelOpen={isLayersPanelOpen}
         onToggleSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
         terrainStatusMessage={terrainStatus.message}
+        onToggleCrowdPanel={() => setIsCrowdPanelOpen(prev => !prev)}
+        isCrowdPanelOpen={isCrowdPanelOpen}
+        onToggleTrafficPanel={() => setIsTrafficPanelOpen(prev => !prev)}
+        isTrafficPanelOpen={isTrafficPanelOpen}
+        onToggleScenarioModal={() => setIsScenarioModalOpen(true)}
       />
 
       {/* Main Body: Sidebar + Cesium Map Viewport */}
