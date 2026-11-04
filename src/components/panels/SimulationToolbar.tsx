@@ -6,7 +6,9 @@ import {
   RotateCcw, 
   Waves, 
   Users, 
-  Bookmark
+  Bookmark,
+  Car,
+  ShieldAlert
 } from 'lucide-react';
 import { BOOKMARK_VIEWS } from '../../config/modules';
 import { BookmarkView } from '../../types/simulation';
@@ -23,6 +25,9 @@ interface SimulationToolbarProps {
   riverLevelMsl: number;
   dischargeCusecs: number;
   onResetMap: () => void;
+  onOpenCrowdControls?: () => void;
+  onOpenTrafficControls?: () => void;
+  onOpenScenarioModal?: () => void;
 }
 
 export const SimulationToolbar: React.FC<SimulationToolbarProps> = ({
@@ -36,6 +41,9 @@ export const SimulationToolbar: React.FC<SimulationToolbarProps> = ({
   riverLevelMsl,
   dischargeCusecs,
   onResetMap,
+  onOpenCrowdControls,
+  onOpenTrafficControls,
+  onOpenScenarioModal,
 }) => {
   const [isBookmarksOpen, setIsBookmarksOpen] = React.useState<boolean>(false);
 
@@ -177,23 +185,56 @@ export const SimulationToolbar: React.FC<SimulationToolbarProps> = ({
           </div>
         </div>
 
-        {/* Right: View Bookmarks & Quick Reset */}
-        <div className="flex items-center gap-2">
+        {/* Right: Modules & View Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {onOpenCrowdControls && (
+            <button
+              onClick={onOpenCrowdControls}
+              className="p-1.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 text-xs font-mono border border-slate-700/60 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors flex items-center gap-1"
+              title="Open Crowd Simulation Controls"
+            >
+              <Users className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden lg:inline">Crowd</span>
+            </button>
+          )}
+
+          {onOpenTrafficControls && (
+            <button
+              onClick={onOpenTrafficControls}
+              className="p-1.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 text-xs font-mono border border-slate-700/60 hover:text-emerald-400 hover:border-emerald-500/40 transition-colors flex items-center gap-1"
+              title="Open Traffic Simulation Controls"
+            >
+              <Car className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden lg:inline">Traffic</span>
+            </button>
+          )}
+
+          {onOpenScenarioModal && (
+            <button
+              onClick={onOpenScenarioModal}
+              className="p-1.5 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 text-xs font-mono border border-slate-700/60 hover:text-amber-400 hover:border-amber-500/40 transition-colors flex items-center gap-1"
+              title="Compare Evacuation Scenarios"
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden lg:inline">Scenarios</span>
+            </button>
+          )}
+
           <button
             onClick={() => setIsBookmarksOpen(prev => !prev)}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-1.5 transition-all ${
+            className={`px-2.5 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-1.5 transition-all ${
               isBookmarksOpen
                 ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/60 shadow-glow-sm'
                 : 'bg-slate-900/80 text-slate-300 border-slate-700/60 hover:text-cyan-400 hover:border-cyan-500/40'
             }`}
           >
             <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden sm:inline">Camera Angles</span>
+            <span className="hidden sm:inline">Camera</span>
           </button>
 
           <button
             onClick={onResetMap}
-            className="p-1.5 px-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-mono border border-slate-700/60 hover:text-cyan-400 transition-colors flex items-center gap-1"
+            className="p-1.5 px-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-mono border border-slate-700/60 hover:text-cyan-400 transition-colors flex items-center gap-1"
             title="Reset Map to Pushkar Ghat"
           >
             <RotateCcw className="w-3.5 h-3.5" />

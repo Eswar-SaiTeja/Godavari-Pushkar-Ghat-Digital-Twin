@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { cesiumService } from '../../services/cesiumService';
+import { crowdEngine } from '../../services/crowdSimulation';
+import { trafficEngine } from '../../services/trafficSimulation';
 import { GhatLocation, LayerVisibilityState } from '../../types/gis';
 import { CesiumNavigationControls } from './CesiumNavigationControls';
 import { Crosshair, Globe } from 'lucide-react';
@@ -64,6 +66,14 @@ export const CesiumViewer: React.FC<CesiumViewerProps> = ({
         setIsLoading(false);
         onTerrainStatusResolved(terrainStatus);
 
+        // Attach crowd and traffic simulation engines to viewer
+        if (cesiumService.viewer) {
+          crowdEngine.setViewer(cesiumService.viewer);
+          trafficEngine.setViewer(cesiumService.viewer);
+          crowdEngine.start();
+          trafficEngine.start();
+        }
+
         // Start telemetry polling for camera HUD
         telemetryTimer = setInterval(() => {
           const t = cesiumService.getCameraTelemetry();
@@ -84,6 +94,8 @@ export const CesiumViewer: React.FC<CesiumViewerProps> = ({
     return () => {
       isMounted = false;
       if (telemetryTimer) clearInterval(telemetryTimer);
+      crowdEngine.destroy();
+      trafficEngine.destroy();
       cesiumService.destroy();
     };
   }, []);

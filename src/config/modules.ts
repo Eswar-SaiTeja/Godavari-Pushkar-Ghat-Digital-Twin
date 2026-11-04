@@ -42,11 +42,11 @@ export const SIDEBAR_MODULES: ModuleDefinition[] = [
     label: 'Crowd Simulation',
     shortDesc: 'Pilgrim density dynamics, bottleneck detection, and flow vectors',
     iconName: 'Users',
-    status: 'SIMULATED_PREVIEW',
-    badgeLabel: 'SIMULATED',
+    status: 'ACTIVE_DAY1',
+    badgeLabel: 'ACTIVE',
     details: {
       overview: 'Agent-based pilgrim mobility forecasting for auspicious Pushkaram muhurtham hours. Simulates queue buffering, step congestion, and safe exit rates.',
-      plannedPhase: 'Phase 2: Agent-based Cellular Automata (Preview Mode Active)',
+      plannedPhase: 'Day 2 Active: Agent-based Cellular Automata & Age Dynamics',
       keyMetrics: [
         { label: 'Simulated Pushkaram Density', value: '3.4', unit: 'devotees/m²' },
         { label: 'Peak Hour Throughput', value: '45,000', unit: 'pax/hr (DEMO)' },
@@ -60,15 +60,15 @@ export const SIDEBAR_MODULES: ModuleDefinition[] = [
     label: 'Traffic & Ingress',
     shortDesc: 'Arterial road corridor flow, bridge bottlenecks, and parking hubs',
     iconName: 'Car',
-    status: 'COMING_SOON',
-    badgeLabel: 'DESIGN',
+    status: 'ACTIVE_DAY1',
+    badgeLabel: 'ACTIVE',
     details: {
       overview: 'Vehicular movement simulation over the Godavari Road-cum-Rail bridge, Kotilingala link road, and outer ring road parking staging lots.',
-      plannedPhase: 'Phase 3: SUMO / Micro-traffic Integration (Coming Soon)',
+      plannedPhase: 'Day 2 Active: Micro-traffic A* Routing & Emergency Escort',
       keyMetrics: [
-        { label: 'Planned Sensor Ingestion', value: '18 ANPR Nodes' },
-        { label: 'Feeder Routes Mapped', value: '4 Primary Corridors' },
-        { label: 'Simulated Parking Capacity', value: '12,500 Vehicles' },
+        { label: 'Active Monitored Corridors', value: '4 Primary Roads' },
+        { label: 'Emergency Escort Priority', value: '108 Siren Dispatch' },
+        { label: 'Simulated Bridge Flow', value: '70 Vehicles Capacity' },
       ]
     }
   },
@@ -95,16 +95,16 @@ export const SIDEBAR_MODULES: ModuleDefinition[] = [
     label: 'Emergency Evacuation',
     shortDesc: 'Rapid crowd dispersal paths, emergency corridors, and assembly zones',
     iconName: 'ShieldAlert',
-    status: 'SIMULATED_PREVIEW',
-    badgeLabel: 'SIMULATED',
+    status: 'ACTIVE_DAY1',
+    badgeLabel: 'ACTIVE',
     details: {
       overview: 'Dynamic route optimization for emergency evacuation from riverfront ghat steps to inland assembly grounds (Arts College, Stadium, and Station grounds).',
-      plannedPhase: 'Phase 2: Shortest-Path Egress Graph Simulation (Preview Active)',
+      plannedPhase: 'Day 2 Active: Scenario Comparison & Evacuation Intelligence',
       keyMetrics: [
         { label: 'Primary Evacuation Corridor', value: 'Pushkar Chowk to Arts College' },
-        { label: 'Simulated Clearance Time', value: '22', unit: 'minutes (DEMO)' },
-        { label: 'Assembly Zone Capacity', value: '1,20,000', unit: 'persons' },
-        { label: 'Emergency Egress Width', value: '18', unit: 'meters' },
+        { label: 'Simulated Clearance Time', value: '48.5s - 142.5s' },
+        { label: 'Assembly Zone Capacity', value: '1,20,000 Persons' },
+        { label: 'Deterministic Scenarios', value: 'Scenarios A, B, and C' },
       ]
     }
   },
