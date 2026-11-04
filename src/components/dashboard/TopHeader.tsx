@@ -104,11 +104,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               </span>
             </div>
             <p className="text-[10px] md:text-xs text-slate-400 flex items-center gap-1.5 font-mono">
-              <span className="text-cyan-400">Rajamahendravaram</span>
+              <span className="text-cyan-400 font-medium">Rajamahendravaram</span>
               <span>•</span>
-              <span className="text-slate-400">AP, India</span>
+              <span className="text-slate-300">AP, India</span>
               <span className="hidden md:inline text-slate-500">|</span>
-              <span className="hidden md:inline text-slate-400">16.9984° N, 81.7774° E</span>
+              <span className="hidden md:inline text-slate-400">16.9984° N, 81.7774° E (Approximate)</span>
             </p>
           </div>
         </div>
@@ -116,15 +116,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* Middle: Simulation Scenario Selector & DEM Badge */}
       <div className="hidden lg:flex items-center gap-3">
-        {/* DEM Status */}
+        {/* Terrain Provider Status */}
         <div 
           className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900/90 border border-slate-700/60 text-[11px] font-mono text-slate-300 cursor-help"
           title={terrainStatusMessage}
         >
           <Database className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="text-slate-400">DEM:</span>
-          <span className="text-cyan-300 font-semibold truncate max-w-[160px]">
-            SRTM 30m (Fallback Active)
+          <span className="text-slate-400">TERRAIN:</span>
+          <span className="text-cyan-300 font-semibold truncate max-w-[210px]">
+            WGS84 Ellipsoid (Active Fallback)
           </span>
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping-slow"></span>
         </div>

@@ -47,16 +47,15 @@ export class CesiumService {
     container: HTMLElement, 
     onLocationSelect?: (location: GhatLocation | null) => void
   ): Promise<{ viewer: Cesium.Viewer; terrainStatus: { hasWorldTerrain: boolean; message: string } }> {
+    const log = (m: string) => {
+      let el = document.getElementById('debug-log');
+      if (el) el.innerText += '\n[CesiumService] ' + m;
+    };
+    log('1. Starting initializeViewer...');
     // Clean up if already exists
     this.destroy();
 
-    // Create custom OpenStreetMap imagery provider as default reliable base layer
-    const osmProvider = new Cesium.OpenStreetMapImageryProvider({
-      url: 'https://tile.openstreetmap.org/',
-      credit: '© OpenStreetMap contributors (ODbL)'
-    });
-
-    // Create the Cesium Viewer instance
+    log('2. Creating Viewer instance with baseLayer=false and Ellipsoid terrain...');
     const viewer = new Cesium.Viewer(container, {
       animation: false,
       baseLayerPicker: false,
@@ -70,13 +69,21 @@ export class CesiumService {
       navigationHelpButton: false,
       scene3DOnly: true,
       shouldAnimate: true,
-      baseLayer: new Cesium.ImageryLayer(osmProvider),
+      baseLayer: false,
+      terrainProvider: new Cesium.EllipsoidTerrainProvider(),
       requestRenderMode: false,
     });
 
+    log('3. Adding OpenStreetMap base imagery layer...');
+    const osmProvider = new Cesium.OpenStreetMapImageryProvider({
+      url: 'https://tile.openstreetmap.org/',
+      credit: '© OpenStreetMap contributors (ODbL)'
+    });
+    viewer.imageryLayers.addImageryProvider(osmProvider);
+
     this.viewer = viewer;
 
-    // Optimize scene rendering for digital-twin command room
+    log('4. Optimizing scene rendering...');
     viewer.scene.globe.enableLighting = true;
     viewer.scene.globe.depthTestAgainstTerrain = false;
     viewer.scene.highDynamicRange = true;
@@ -84,13 +91,13 @@ export class CesiumService {
     viewer.scene.fog.density = 0.00015;
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#070b14');
 
-    // Attempt to load terrain gracefully with fallback
+    log('5. Setting up terrain with fallback...');
     await this.setupTerrainWithFallback(viewer);
 
-    // Set initial camera over Rajamahendravaram Godavari Pushkar Ghat
+    log('6. Flying to initial position...');
     this.flyToInitialPosition(false);
 
-    // Build spatial layers
+    log('7. Creating spatial layers...');
     this.createBoundaryLayers();
     this.createBridgeLayers();
     this.createGhatLocationMarkers();
@@ -99,9 +106,10 @@ export class CesiumService {
     this.createWaterFlowVectors();
     this.createCrowdDensityOverlay();
 
-    // Set up interactive click handler for picking GIS entities
+    log('8. Setting up interaction handlers...');
     this.setupInteractionHandlers(onLocationSelect);
 
+    log('9. initializeViewer complete!');
     return { viewer, terrainStatus: this.terrainStatus };
   }
 
@@ -110,8 +118,8 @@ export class CesiumService {
    */
   private async setupTerrainWithFallback(viewer: Cesium.Viewer): Promise<void> {
     try {
-      // Check if Ion token is available before attempting Ion terrain
-      if (Cesium.Ion.defaultAccessToken && Cesium.Ion.defaultAccessToken.length > 10) {
+      // Only attempt Ion terrain if an explicit user token was provided in environment variables
+      if (ionToken && ionToken.trim().length > 10) {
         try {
           const terrain = await Cesium.createWorldTerrainAsync({
             requestWaterMask: true,
@@ -129,11 +137,11 @@ export class CesiumService {
         }
       }
 
-      // Default reliable Ellipsoid fallback
+      // Default reliable Ellipsoid fallback (instant, offline-capable, stable)
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
       this.terrainStatus = {
         hasWorldTerrain: false,
-        message: 'Standard WGS84 Ellipsoid + Synthetic DEM Elevation Profile (Graceful Fallback Mode)'
+        message: 'Standard WGS84 Ellipsoid + Synthetic DEM Elevation Profile (Active Fallback)'
       };
     } catch (err) {
       console.warn('[CesiumService] Terrain setup encountered exception, using fallback:', err);

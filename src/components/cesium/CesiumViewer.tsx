@@ -37,14 +37,29 @@ export const CesiumViewer: React.FC<CesiumViewerProps> = ({
     let isMounted = true;
     let telemetryTimer: any = null;
 
+    const logDebug = (msg: string) => {
+      console.log(msg);
+      let el = document.getElementById('debug-log');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'debug-log';
+        el.style.display = 'none';
+        document.body.appendChild(el);
+      }
+      el.innerText += '\n' + msg;
+    };
+
+    logDebug('[CesiumViewer] Mounting, container exists: ' + !!containerRef.current);
     if (!containerRef.current) return;
 
+    logDebug('[CesiumViewer] Calling initializeViewer...');
     cesiumService.initializeViewer(containerRef.current, (loc) => {
       if (isMounted) {
         onSelectLocation(loc);
       }
     })
       .then(({ terrainStatus }) => {
+        logDebug('[CesiumViewer] initializeViewer RESOLVED successfully!');
         if (!isMounted) return;
         setIsLoading(false);
         onTerrainStatusResolved(terrainStatus);
@@ -58,6 +73,7 @@ export const CesiumViewer: React.FC<CesiumViewerProps> = ({
         }, 300);
       })
       .catch((err) => {
+        logDebug('[CesiumViewer] initializeViewer REJECTED: ' + (err?.stack || err?.message || err));
         console.error('[CesiumViewer] Failed to initialize Cesium Viewer:', err);
         if (isMounted) {
           setIsLoading(false);
