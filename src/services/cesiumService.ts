@@ -35,6 +35,8 @@ export class CesiumService {
   private measurePoints: Cesium.Cartesian3[] = [];
   private measureEntities: Cesium.Entity[] = [];
   private onMeasurementUpdate: ((state: MeasurementState) => void) | null = null;
+  private google3DTileset: Cesium.Cesium3DTileset | null = null;
+  private currentBaseImagery: BaseImageryProvider = 'osm';
   private terrainStatus: { hasWorldTerrain: boolean; message: string } = {
     hasWorldTerrain: false,
     message: 'WGS84 Ellipsoid (Fallback Mode Active)'
@@ -79,7 +81,10 @@ export class CesiumService {
       url: 'https://tile.openstreetmap.org/',
       credit: '© OpenStreetMap contributors (ODbL)'
     });
-    viewer.imageryLayers.addImageryProvider(osmProvider);
+    const baseLayer = viewer.imageryLayers.addImageryProvider(osmProvider);
+    baseLayer.errorEvent.addEventListener(() => {
+      console.warn('[CesiumService] Primary basemap tile warning handled; keeping fallback surface.');
+    });
 
     this.viewer = viewer;
 
@@ -89,7 +94,8 @@ export class CesiumService {
     viewer.scene.highDynamicRange = true;
     viewer.scene.fog.enabled = true;
     viewer.scene.fog.density = 0.00015;
-    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#070b14');
+    // Command-center deep navy slate base color so failed/loading tiles never display a pitch black abyss
+    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#0b1329');
 
     log('5. Setting up terrain with fallback...');
     await this.setupTerrainWithFallback(viewer);
@@ -204,34 +210,63 @@ export class CesiumService {
   }
 
   /**
-   * Sets the base imagery provider
+   * Sets the base imagery provider with graceful fallback and error handling
    */
-  public setBaseImagery(providerType: BaseImageryProvider): void {
-    if (!this.viewer) return;
+  public async setBaseImagery(providerType: BaseImageryProvider): Promise<{ success: boolean; activeProvider: BaseImageryProvider; message?: string }> {
+    if (!this.viewer) return { success: false, activeProvider: 'osm' };
+
+    // Clean up any active 3D tileset when switching basemaps
+    if (this.google3DTileset) {
+      this.viewer.scene.primitives.remove(this.google3DTileset);
+      this.google3DTileset = null;
+    }
+
+    // Handle Google Photorealistic 3D Tiles
+    if (providerType === 'google_3d_tiles') {
+      const googleKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_3D_TILES_KEY;
+      if (!googleKey || typeof googleKey !== 'string' || googleKey.trim().length < 10) {
+        console.warn('[CesiumService] Google Maps API key not detected in environment. Reverting to OpenStreetMap.');
+        await this.setBaseImagery('osm');
+        return {
+          success: false,
+          activeProvider: 'osm',
+          message: 'Google Maps API key is not configured (VITE_GOOGLE_MAPS_API_KEY). Active basemap remained OpenStreetMap.'
+        };
+      }
+
+      try {
+        const tileset = await Cesium.createGooglePhotorealistic3DTileset({
+          key: googleKey.trim(),
+        });
+        if (this.viewer) {
+          this.google3DTileset = this.viewer.scene.primitives.add(tileset);
+          this.viewer.imageryLayers.removeAll();
+          this.currentBaseImagery = 'google_3d_tiles';
+          return { success: true, activeProvider: 'google_3d_tiles' };
+        }
+      } catch (err: any) {
+        console.warn('[CesiumService] Google Photorealistic 3D Tiles failed to load. Falling back to OpenStreetMap.', err?.message || '');
+        await this.setBaseImagery('osm');
+        return {
+          success: false,
+          activeProvider: 'osm',
+          message: 'Unable to initialize Google 3D Tiles with current credentials. Reverted to OpenStreetMap.'
+        };
+      }
+    }
 
     let newProvider: Cesium.ImageryProvider;
+    const cartoKey = import.meta.env.VITE_CARTO_API_KEY;
 
     switch (providerType) {
       case 'osm':
         newProvider = new Cesium.OpenStreetMapImageryProvider({
           url: 'https://tile.openstreetmap.org/',
-          credit: '© OpenStreetMap contributors'
+          credit: '© OpenStreetMap contributors (ODbL)'
         });
         break;
-      case 'carto_dark':
-        newProvider = new Cesium.UrlTemplateImageryProvider({
-          url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-          subdomains: ['a', 'b', 'c', 'd'],
-          credit: '© CartoDB Dark Matter'
-        });
-        break;
-      case 'carto_voyager':
-        newProvider = new Cesium.UrlTemplateImageryProvider({
-          url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-          subdomains: ['a', 'b', 'c', 'd'],
-          credit: '© CartoDB Voyager'
-        });
-        break;
+
+      case 'esri_satellite':
       case 'arcgis_world':
       case 'sentinel_aerial':
         newProvider = new Cesium.UrlTemplateImageryProvider({
@@ -239,6 +274,55 @@ export class CesiumService {
           credit: '© Esri World Imagery, Maxar, Earthstar Geographics'
         });
         break;
+
+      case 'esri_topo':
+        newProvider = new Cesium.UrlTemplateImageryProvider({
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+          credit: '© Esri World Topographic Map, HERE, Garmin'
+        });
+        break;
+
+      case 'dark_canvas':
+        newProvider = new Cesium.UrlTemplateImageryProvider({
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+          credit: '© Esri Dark Gray Canvas'
+        });
+        break;
+
+      case 'carto_dark':
+        if (cartoKey && cartoKey.trim().length > 5) {
+          newProvider = new Cesium.UrlTemplateImageryProvider({
+            url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?api_key=${encodeURIComponent(cartoKey.trim())}`,
+            subdomains: ['a', 'b', 'c', 'd'],
+            credit: '© CARTO'
+          });
+        } else {
+          // Graceful fallback to Esri Dark Canvas - NO API KEY needed, NO watermarks!
+          console.warn('[CesiumService] Carto API key not configured; seamlessly using Esri Dark Canvas fallback.');
+          newProvider = new Cesium.UrlTemplateImageryProvider({
+            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+            credit: '© Esri Dark Gray Canvas (High-Contrast Fallback)'
+          });
+        }
+        break;
+
+      case 'carto_voyager':
+        if (cartoKey && cartoKey.trim().length > 5) {
+          newProvider = new Cesium.UrlTemplateImageryProvider({
+            url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?api_key=${encodeURIComponent(cartoKey.trim())}`,
+            subdomains: ['a', 'b', 'c', 'd'],
+            credit: '© CARTO Voyager'
+          });
+        } else {
+          // Graceful fallback to Esri Topo - NO API KEY needed, NO watermarks!
+          console.warn('[CesiumService] Carto API key not configured; seamlessly using Esri Topographic fallback.');
+          newProvider = new Cesium.UrlTemplateImageryProvider({
+            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+            credit: '© Esri World Topo Map (Fallback)'
+          });
+        }
+        break;
+
       default:
         newProvider = new Cesium.OpenStreetMapImageryProvider({
           url: 'https://tile.openstreetmap.org/',
@@ -246,9 +330,29 @@ export class CesiumService {
         });
     }
 
-    // Replace imagery layer
-    this.viewer.imageryLayers.removeAll();
-    this.viewer.imageryLayers.addImageryProvider(newProvider);
+    try {
+      // Replace imagery layer
+      this.viewer.imageryLayers.removeAll();
+      const imageryLayer = this.viewer.imageryLayers.addImageryProvider(newProvider);
+      imageryLayer.errorEvent.addEventListener(() => {
+        console.warn('[CesiumService] Imagery tile error caught gracefully. Basemap surface preserved.');
+      });
+      this.currentBaseImagery = providerType;
+      return { success: true, activeProvider: providerType };
+    } catch (err: any) {
+      console.warn('[CesiumService] Error adding imagery provider, reverting to OpenStreetMap:', err?.message || '');
+      this.viewer.imageryLayers.removeAll();
+      const fallbackLayer = this.viewer.imageryLayers.addImageryProvider(
+        new Cesium.OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' })
+      );
+      fallbackLayer.errorEvent.addEventListener(() => {});
+      this.currentBaseImagery = 'osm';
+      return { success: false, activeProvider: 'osm', message: 'Failed to load imagery. Reverted to OpenStreetMap.' };
+    }
+  }
+
+  public getCurrentBaseImagery(): BaseImageryProvider {
+    return this.currentBaseImagery;
   }
 
   /**
@@ -993,6 +1097,13 @@ export class CesiumService {
     if (this.handler && !this.handler.isDestroyed()) {
       this.handler.destroy();
       this.handler = null;
+    }
+
+    if (this.google3DTileset && this.viewer) {
+      try {
+        this.viewer.scene.primitives.remove(this.google3DTileset);
+      } catch (e) {}
+      this.google3DTileset = null;
     }
 
     if (this.viewer && !this.viewer.isDestroyed()) {

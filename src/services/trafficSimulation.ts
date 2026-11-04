@@ -220,7 +220,6 @@ export class TrafficSimulationEngine {
    */
   public dispatchEmergencyAmbulance(): VehicleAgent {
     const startNode = this.graph.nodes.get('kovvur_bridge_entry')!;
-    const endNode = this.graph.nodes.get('pushkar_ghat_road_south')!;
     const path = this.graph.findPath('kovvur_bridge_entry', 'pushkar_ghat_road_south');
 
     const ambulance: VehicleAgent = {

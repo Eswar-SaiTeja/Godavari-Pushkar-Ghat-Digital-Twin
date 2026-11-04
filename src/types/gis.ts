@@ -63,10 +63,14 @@ export interface ProjectBoundary {
 
 export type BaseImageryProvider = 
   | 'osm' 
+  | 'esri_satellite' 
+  | 'esri_topo' 
+  | 'dark_canvas' 
   | 'carto_dark' 
   | 'carto_voyager' 
   | 'sentinel_aerial' 
-  | 'arcgis_world';
+  | 'arcgis_world'
+  | 'google_3d_tiles';
 
 export type TerrainProviderType = 
   | 'cesium_world_terrain' 

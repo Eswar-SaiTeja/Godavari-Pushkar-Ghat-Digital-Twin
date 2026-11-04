@@ -13,15 +13,26 @@ export type BehaviorState =
 
 export type CrowdDensityLevel = 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
 
+export type AgentDisplayFilter = 
+  | 'ALL' 
+  | 'CHILDREN' 
+  | 'YOUNG' 
+  | 'ADULTS' 
+  | 'SENIORS' 
+  | 'ASSISTANCE_REQUIRED';
+
 export interface AgeGroupProfile {
   ageGroup: AgeGroup;
   label: string;
   ageRange: string;
+  count: number; // population count
   baseSpeed: number; // m/s
   acceleration: number; // m/s^2
   directionChangeFreq: number; // probability per sec
+  obstacleAvoidance: number; // 0.0 to 1.0
   reactionDelayRange: [number, number]; // [min, max] in seconds
   restingProbability: number; // probability per min
+  groupBehavior: boolean;
   color: string;
   defaultProportion: number; // 0.0 to 1.0 (sums to 1.0)
 }
@@ -75,8 +86,11 @@ export interface CrowdMetrics {
   averageReactionDelay: number;
   responsePercentage: number;
   assistanceRequiredCount: number;
+  nonResponsiveCount: number;
   currentDensityLevel: CrowdDensityLevel;
   densityValue: number; // people per sq meter
+  entryFlowRatePerMin: number; // SIMULATED
+  exitFlowRatePerMin: number; // SIMULATED
   activeBottlenecks: { locationName: string; density: number; coordinates: [number, number] }[];
   evacuationCompleteTimeSeconds: number | null;
 }

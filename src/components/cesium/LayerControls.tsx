@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Layers, 
   Eye, 
@@ -8,11 +8,13 @@ import {
   Users, 
   Waves, 
   ShieldAlert, 
-  X,
-  Sparkles
+  Sparkles,
+  Info,
+  CheckCircle2
 } from 'lucide-react';
 import { LayerVisibilityState, BaseImageryProvider } from '../../types/gis';
 import { cesiumService } from '../../services/cesiumService';
+import { FloatingPanel } from '../common/FloatingPanel';
 
 interface LayerControlsProps {
   layers: LayerVisibilityState;
@@ -31,13 +33,47 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
   isOpen,
   onClose,
 }) => {
+  const [providerNotification, setProviderNotification] = useState<string | null>(null);
+
   if (!isOpen) return null;
 
-  const baseLayerOptions: { id: BaseImageryProvider; label: string; desc: string }[] = [
-    { id: 'osm', label: 'OpenStreetMap', desc: 'Standard topographic cartography' },
-    { id: 'carto_dark', label: 'Carto Dark Matter', desc: 'High-contrast command-center mode' },
-    { id: 'carto_voyager', label: 'Carto Voyager', desc: 'Detailed urban street & riverfront' },
-    { id: 'arcgis_world', label: 'Satellite Aerial', desc: 'Photorealistic high-res satellite' },
+  const googleKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_3D_TILES_KEY;
+  const hasGoogleKey = Boolean(googleKey && typeof googleKey === 'string' && googleKey.trim().length > 10);
+
+  const baseLayerOptions: { id: BaseImageryProvider; label: string; desc: string; badge?: string; badgeColor?: string }[] = [
+    { 
+      id: 'osm', 
+      label: 'OpenStreetMap', 
+      desc: 'Topographic cartography (No Key)',
+      badge: 'DEFAULT',
+      badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+    },
+    { 
+      id: 'esri_satellite', 
+      label: 'Satellite Aerial', 
+      desc: 'Photorealistic imagery (No Key)',
+      badge: 'HIGH-RES',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+    },
+    { 
+      id: 'dark_canvas', 
+      label: 'Dark Canvas', 
+      desc: 'High-contrast command HUD (No Key)',
+      badge: 'HUD',
+      badgeColor: 'bg-slate-500/20 text-slate-300 border-slate-500/40'
+    },
+    { 
+      id: 'esri_topo', 
+      label: 'Esri Topo', 
+      desc: 'Urban streets & contour grid (No Key)',
+    },
+    { 
+      id: 'google_3d_tiles', 
+      label: 'Google 3D Tiles', 
+      desc: hasGoogleKey ? 'Photorealistic 3D Mesh' : 'API Key Required in .env',
+      badge: hasGoogleKey ? 'READY' : 'KEY REQUIRED',
+      badgeColor: hasGoogleKey ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+    },
   ];
 
   const layerItems: { key: keyof LayerVisibilityState; label: string; icon: React.ReactNode; color: string }[] = [
@@ -51,31 +87,39 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
     { key: 'labels3D', label: '3D Spatial Pin Labels', icon: <Eye className="w-4 h-4" />, color: 'text-slate-300' },
   ];
 
-  const handleBaseLayerSelect = (provider: BaseImageryProvider) => {
-    onChangeBaseImagery(provider);
-    cesiumService.setBaseImagery(provider);
+  const handleBaseLayerSelect = async (provider: BaseImageryProvider) => {
+    if (provider === 'google_3d_tiles' && !hasGoogleKey) {
+      setProviderNotification('Google Photorealistic 3D Tiles requires a valid Google Maps API Key configured in your environment (VITE_GOOGLE_MAPS_API_KEY). OpenStreetMap remains active.');
+      onChangeBaseImagery('osm');
+      await cesiumService.setBaseImagery('osm');
+      return;
+    }
+
+    setProviderNotification(null);
+    const result = await cesiumService.setBaseImagery(provider);
+    onChangeBaseImagery(result.activeProvider);
+    if (!result.success && result.message) {
+      setProviderNotification(result.message);
+    }
   };
 
   return (
-    <div className="absolute top-20 left-4 lg:left-80 z-20 w-80 glass-panel rounded-xl border border-cyan-500/30 p-4 shadow-panel select-none animate-in fade-in slide-in-from-top-2 duration-200">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-700/60 mb-3">
-        <div className="flex items-center gap-2 text-cyan-300">
-          <Layers className="w-4 h-4" />
-          <span className="text-xs font-mono font-bold tracking-wider uppercase">
-            GIS Layers & Basemaps
-          </span>
-        </div>
-        <button
-          onClick={onClose}
-          className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Layer Toggles */}
-      <div className="space-y-1.5 mb-4">
+    <FloatingPanel
+      id="gis_layers_panel"
+      title="GIS Layers & Basemaps"
+      subtitle="Spatial Overlays • Free Movement"
+      icon={<Layers className="w-4 h-4" />}
+      defaultPosition={{ x: 300, y: 76 }}
+      defaultSize={{ width: 330, height: 'auto' }}
+      minWidth={280}
+      maxWidth={520}
+      maxHeight={740}
+      isOpen={isOpen}
+      onClose={onClose}
+      resizable={true}
+    >
+      {/* Vector & Spatial Overlays */}
+      <div className="space-y-1.5 mb-3.5">
         <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block mb-1">
           Vector & Spatial Overlays
         </span>
@@ -87,7 +131,7 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
               onClick={() => onToggleLayer(item.key)}
               className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 isEnabled
-                  ? 'bg-slate-800/80 text-slate-100 border border-slate-700/70'
+                  ? 'bg-slate-800/80 text-slate-100 border border-slate-700/70 hover:border-cyan-500/40'
                   : 'bg-slate-900/40 text-slate-400 border border-transparent hover:bg-slate-800/40'
               }`}
             >
@@ -107,26 +151,46 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
 
       {/* Base Imagery Selector */}
       <div className="pt-2 border-t border-slate-700/60">
-        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block mb-2">
-          Base Imagery Provider
-        </span>
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+            Base Imagery Provider
+          </span>
+          <span className="text-[9px] font-mono text-cyan-400 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" /> No Watermarks
+          </span>
+        </div>
+
+        {providerNotification && (
+          <div className="mb-2 p-2 rounded-lg bg-amber-950/60 border border-amber-500/40 text-[10px] font-mono text-amber-200 flex items-start gap-1.5">
+            <Info className="w-3.5 h-3.5 flex-shrink-0 text-amber-400 mt-0.5" />
+            <span>{providerNotification}</span>
+          </div>
+        )}
+
+        <div className="space-y-1.5">
           {baseLayerOptions.map((opt) => (
             <button
               key={opt.id}
               onClick={() => handleBaseLayerSelect(opt.id)}
-              className={`p-2 rounded-lg text-left text-[11px] font-mono transition-all border ${
+              className={`w-full p-2 rounded-lg text-left text-[11px] font-mono transition-all border flex items-center justify-between ${
                 baseImagery === opt.id
                   ? 'bg-cyan-950/80 text-cyan-300 border-cyan-400/60 shadow-glow-sm'
                   : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
               }`}
             >
-              <div className="font-semibold truncate">{opt.label}</div>
-              <div className="text-[9px] text-slate-400 truncate mt-0.5">{opt.desc}</div>
+              <div className="truncate mr-2">
+                <div className="font-semibold truncate">{opt.label}</div>
+                <div className="text-[9px] text-slate-400 truncate mt-0.5">{opt.desc}</div>
+              </div>
+              {opt.badge && (
+                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold border tracking-wider flex-shrink-0 ${opt.badgeColor || 'bg-slate-800 text-slate-300 border-slate-700'}`}>
+                  {opt.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
       </div>
-    </div>
+    </FloatingPanel>
   );
 };

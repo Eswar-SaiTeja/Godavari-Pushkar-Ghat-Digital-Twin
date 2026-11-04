@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  X, 
   Send, 
   ShieldCheck, 
   Users, 
@@ -14,6 +13,7 @@ import { GhatLocation } from '../../types/gis';
 import { GHAT_LOCATIONS } from '../../config/locations';
 import { Badge } from '../common/Badge';
 import { cesiumService } from '../../services/cesiumService';
+import { FloatingPanel } from '../common/FloatingPanel';
 
 interface LocationInfoPanelProps {
   selectedLocation: GhatLocation | null;
@@ -57,22 +57,33 @@ export const LocationInfoPanel: React.FC<LocationInfoPanelProps> = ({
     return matchesSearch && matchesCategory;
   });
 
+  const defaultRightX = typeof window !== 'undefined' ? Math.max(16, window.innerWidth - 410) : 1100;
+
   return (
-    <div className="fixed top-20 right-4 z-30 w-88 md:w-96 max-h-[calc(100vh-6.5rem)] glass-panel rounded-2xl border border-cyan-500/30 flex flex-col shadow-panel overflow-hidden select-none animate-in fade-in slide-in-from-right-4 duration-300">
-      {/* Top Banner: Quick Location Jump Chips & Filter */}
-      <div className="bg-slate-950/70 p-2.5 border-b border-slate-800/80 space-y-2">
+    <FloatingPanel
+      id="location_info_panel"
+      title={selectedLocation.name}
+      subtitle={`${selectedLocation.category.toUpperCase()} ZONE • MSL +${selectedLocation.elevationMsl}m`}
+      icon={<Compass className="w-4 h-4" />}
+      defaultPosition={{ x: defaultRightX, y: 76 }}
+      defaultSize={{ width: 380, height: 'auto' }}
+      minWidth={320}
+      maxWidth={540}
+      maxHeight={780}
+      isOpen={Boolean(selectedLocation)}
+      onClose={onClose}
+      resizable={true}
+    >
+      {/* Search & Quick Directory */}
+      <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800/80 mb-3 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1">
             <Compass className="w-3 h-3 text-cyan-400" />
             Ghat & Landmark Directory
           </span>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-100 transition-colors"
-            title="Close Inspector"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <Badge variant={getStatusVariant(selectedLocation.status)} size="sm">
+            {selectedLocation.status}
+          </Badge>
         </div>
 
         {/* Search Input */}
@@ -128,28 +139,13 @@ export const LocationInfoPanel: React.FC<LocationInfoPanelProps> = ({
         </div>
       </div>
 
-      {/* Main Content Body */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Title & Category Header */}
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <Badge variant={getStatusVariant(selectedLocation.status)} pulse>
-              {selectedLocation.status}
-            </Badge>
-            <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest">
-              {selectedLocation.category.toUpperCase()} ZONE
-            </span>
-          </div>
-
-          <h2 className="text-lg font-bold text-slate-100 leading-tight">
-            {selectedLocation.name}
-          </h2>
-          {selectedLocation.teluguName && (
-            <p className="text-xs text-cyan-400 font-sans mt-0.5">
-              {selectedLocation.teluguName}
-            </p>
-          )}
-        </div>
+      {/* Main Details Body */}
+      <div className="space-y-3.5">
+        {selectedLocation.teluguName && (
+          <p className="text-xs text-cyan-400 font-sans -mt-1">
+            {selectedLocation.teluguName}
+          </p>
+        )}
 
         {/* Spatial Coordinates Grid */}
         <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 font-mono text-[11px]">
@@ -261,7 +257,7 @@ export const LocationInfoPanel: React.FC<LocationInfoPanelProps> = ({
       </div>
 
       {/* Action Footer */}
-      <div className="p-3 bg-slate-950/80 border-t border-slate-800/80 flex items-center gap-2">
+      <div className="pt-3 mt-3 border-t border-slate-800/80 flex items-center gap-2">
         <button
           onClick={handleFlyTo}
           className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-glow-cyan"
@@ -278,6 +274,6 @@ export const LocationInfoPanel: React.FC<LocationInfoPanelProps> = ({
           <Maximize2 className="w-3.5 h-3.5" />
         </button>
       </div>
-    </div>
+    </FloatingPanel>
   );
 };

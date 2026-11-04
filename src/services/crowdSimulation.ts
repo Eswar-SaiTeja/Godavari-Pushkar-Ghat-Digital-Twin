@@ -5,8 +5,8 @@ import {
   PedestrianAgent, 
   SimulationGate, 
   CrowdMetrics, 
-  BehaviorState, 
-  CrowdDensityLevel 
+  CrowdDensityLevel,
+  AgentDisplayFilter
 } from '../types/crowd';
 import { createPushkarGhatPedestrianGraph, AStarGraph } from './pathfinding';
 
@@ -15,11 +15,14 @@ export const DEFAULT_AGE_PROFILES: Record<AgeGroup, AgeGroupProfile> = {
     ageGroup: 'CHILDREN',
     label: 'Children (5–12 yrs)',
     ageRange: '5–12',
+    count: 38,
     baseSpeed: 1.0,
     acceleration: 0.6,
     directionChangeFreq: 0.25,
+    obstacleAvoidance: 0.65,
     reactionDelayRange: [2.0, 5.0],
     restingProbability: 0.15,
+    groupBehavior: true,
     color: '#fbbf24', // Amber gold
     defaultProportion: 0.15,
   },
@@ -27,11 +30,14 @@ export const DEFAULT_AGE_PROFILES: Record<AgeGroup, AgeGroupProfile> = {
     ageGroup: 'YOUNG',
     label: 'Young (13–35 yrs)',
     ageRange: '13–35',
+    count: 112,
     baseSpeed: 1.5,
     acceleration: 1.2,
     directionChangeFreq: 0.10,
+    obstacleAvoidance: 0.85,
     reactionDelayRange: [0.5, 2.0],
     restingProbability: 0.05,
+    groupBehavior: false,
     color: '#06b6d4', // Cyan
     defaultProportion: 0.45,
   },
@@ -39,11 +45,14 @@ export const DEFAULT_AGE_PROFILES: Record<AgeGroup, AgeGroupProfile> = {
     ageGroup: 'ADULTS',
     label: 'Adults (36–59 yrs)',
     ageRange: '36–59',
+    count: 62,
     baseSpeed: 1.25,
     acceleration: 0.9,
     directionChangeFreq: 0.08,
+    obstacleAvoidance: 0.80,
     reactionDelayRange: [1.0, 3.0],
     restingProbability: 0.10,
+    groupBehavior: true,
     color: '#3b82f6', // Blue
     defaultProportion: 0.25,
   },
@@ -51,11 +60,14 @@ export const DEFAULT_AGE_PROFILES: Record<AgeGroup, AgeGroupProfile> = {
     ageGroup: 'SENIORS',
     label: 'Senior Citizens (60+ yrs)',
     ageRange: '60+',
+    count: 38,
     baseSpeed: 0.85,
     acceleration: 0.4,
     directionChangeFreq: 0.05,
+    obstacleAvoidance: 0.50,
     reactionDelayRange: [2.5, 7.0],
     restingProbability: 0.30,
+    groupBehavior: false,
     color: '#a855f7', // Purple
     defaultProportion: 0.15,
   },
@@ -114,6 +126,7 @@ export class CrowdSimulationEngine {
   private gates: SimulationGate[] = [...DEFAULT_GATES];
   private ageProfiles: Record<AgeGroup, AgeGroupProfile> = { ...DEFAULT_AGE_PROFILES };
   private targetAgentCount: number = 250;
+  private activeDisplayFilter: AgentDisplayFilter = 'ALL';
   private pointPrimitives: Cesium.PointPrimitiveCollection | null = null;
   private bottleneckEntities: Cesium.Entity[] = [];
   private densityEntities: Cesium.Entity[] = [];
@@ -132,7 +145,60 @@ export class CrowdSimulationEngine {
     this.viewer = viewer;
     if (viewer) {
       this.pointPrimitives = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
+      this.initDensityHeatmapEntities();
     }
+  }
+
+  public getGates(): SimulationGate[] {
+    return [...this.gates];
+  }
+
+  public toggleGate(gateId: string): void {
+    const gate = this.gates.find(g => g.id === gateId);
+    if (gate) {
+      gate.isOpen = !gate.isOpen;
+      this.updateMetrics();
+    }
+  }
+
+  public getAgeProfiles(): Record<AgeGroup, AgeGroupProfile> {
+    return { ...this.ageProfiles };
+  }
+
+  public updateAgeProfile(ageGroup: AgeGroup, updates: Partial<AgeGroupProfile>): void {
+    if (this.ageProfiles[ageGroup]) {
+      this.ageProfiles[ageGroup] = { ...this.ageProfiles[ageGroup], ...updates };
+      // Apply immediately to agents of that age group
+      this.agents.forEach(agent => {
+        if (agent.ageGroup === ageGroup) {
+          if (updates.baseSpeed !== undefined) {
+            agent.targetSpeed = updates.baseSpeed;
+          }
+        }
+      });
+      this.updateMetrics();
+    }
+  }
+
+  public getIsRunning(): boolean {
+    return this.isRunning;
+  }
+
+  public getIsEmergency(): boolean {
+    return this.isEmergencyAlertActive;
+  }
+
+  public getAlertDurationSeconds(): number {
+    return this.alertStartTime ? (performance.now() - this.alertStartTime) / 1000 : 0;
+  }
+
+  public getDisplayFilter(): AgentDisplayFilter {
+    return this.activeDisplayFilter;
+  }
+
+  public setDisplayFilter(filter: AgentDisplayFilter): void {
+    this.activeDisplayFilter = filter;
+    this.renderAgentsToCesium();
   }
 
   public start(): void {
@@ -417,7 +483,23 @@ export class CrowdSimulationEngine {
         continue;
       }
 
-      primitive.show = true;
+      // Check display filter
+      let isVisible = true;
+      if (this.activeDisplayFilter === 'CHILDREN') {
+        isVisible = agent.ageGroup === 'CHILDREN';
+      } else if (this.activeDisplayFilter === 'YOUNG') {
+        isVisible = agent.ageGroup === 'YOUNG';
+      } else if (this.activeDisplayFilter === 'ADULTS') {
+        isVisible = agent.ageGroup === 'ADULTS';
+      } else if (this.activeDisplayFilter === 'SENIORS') {
+        isVisible = agent.ageGroup === 'SENIORS';
+      } else if (this.activeDisplayFilter === 'ASSISTANCE_REQUIRED') {
+        isVisible = agent.requiresAssistance;
+      }
+
+      primitive.show = isVisible;
+      if (!isVisible) continue;
+
       primitive.position = Cesium.Cartesian3.fromDegrees(
         agent.position.longitude,
         agent.position.latitude,
@@ -469,6 +551,17 @@ export class CrowdSimulationEngine {
       });
     }
 
+    // Entry and exit gate flow rates (SIMULATED pax/min)
+    const openEntryGates = this.gates.filter(g => (g.type === 'ENTRY' || g.type === 'DUAL') && g.isOpen);
+    const openExitGates = this.gates.filter(g => (g.type === 'EXIT' || g.type === 'DUAL') && g.isOpen);
+
+    const baseEntryFlow = openEntryGates.reduce((sum, g) => sum + g.currentFlowRatePerMin, 0);
+    const baseExitFlow = openExitGates.reduce((sum, g) => sum + g.currentFlowRatePerMin, 0);
+
+    const activeRatio = Math.min(1.5, activeAgents.length / 250);
+    const entryFlowRate = Math.round(baseEntryFlow * activeRatio * (this.isEmergencyAlertActive ? 0.1 : 1.0));
+    const exitFlowRate = Math.round(baseExitFlow * activeRatio * (this.isEmergencyAlertActive ? 1.8 : 0.9));
+
     const metrics: CrowdMetrics = {
       totalActivePedestrians: activeAgents.length,
       evacuatedPedestrians: evacuatedAgents.length,
@@ -477,17 +570,111 @@ export class CrowdSimulationEngine {
       averageReactionDelay: Number(avgReaction.toFixed(2)),
       responsePercentage: Number(responsePct.toFixed(1)),
       assistanceRequiredCount: assistanceCount,
+      nonResponsiveCount: activeAgents.filter(a => this.isEmergencyAlertActive && !a.hasRespondedToAlert).length,
       currentDensityLevel: densityLevel,
       densityValue: densityVal,
+      entryFlowRatePerMin: entryFlowRate,
+      exitFlowRatePerMin: exitFlowRate,
       activeBottlenecks: bottlenecks,
       evacuationCompleteTimeSeconds: evacuatedAgents.length === this.agents.length && this.agents.length > 0 
         ? Math.max(...evacuatedAgents.map(a => a.evacuationTimeSeconds || 0)) 
         : null,
     };
 
+    this.updateDensityHeatmaps(densityLevel);
+    this.updateBottleneckEntities(bottlenecks);
+
     if (this.onMetricsUpdate) {
       this.onMetricsUpdate(metrics);
     }
+  }
+
+  private initDensityHeatmapEntities(): void {
+    if (!this.viewer) return;
+    this.densityEntities.forEach(e => this.viewer?.entities.remove(e));
+    this.densityEntities = [];
+
+    const zones = [
+      { name: 'Pushkar Steps Zone', lon: 81.7774, lat: 16.9984, semiMajor: 90, semiMinor: 45 },
+      { name: 'Promenade Concourse', lon: 81.7778, lat: 16.9980, semiMajor: 120, semiMinor: 55 },
+      { name: 'Kotilingala Concourse', lon: 81.7725, lat: 17.0062, semiMajor: 110, semiMinor: 50 },
+      { name: 'Markandeya Temple Entry', lon: 81.7815, lat: 16.9945, semiMajor: 80, semiMinor: 40 },
+    ];
+
+    zones.forEach(z => {
+      const entity = this.viewer!.entities.add({
+        name: `Density_Zone_${z.name}`,
+        position: Cesium.Cartesian3.fromDegrees(z.lon, z.lat, 17),
+        ellipse: {
+          semiMajorAxis: z.semiMajor,
+          semiMinorAxis: z.semiMinor,
+          material: Cesium.Color.fromCssColorString('#10b981').withAlpha(0.25),
+          outline: true,
+          outlineColor: Cesium.Color.fromCssColorString('#10b981').withAlpha(0.6),
+          outlineWidth: 2,
+        },
+      });
+      this.densityEntities.push(entity);
+    });
+  }
+
+  private updateDensityHeatmaps(level: CrowdDensityLevel): void {
+    let colorCss = '#10b981'; // Green (LOW)
+    let alpha = 0.25;
+
+    if (level === 'MODERATE') {
+      colorCss = '#f59e0b'; // Amber
+      alpha = 0.35;
+    } else if (level === 'HIGH') {
+      colorCss = '#ea580c'; // Orange
+      alpha = 0.45;
+    } else if (level === 'CRITICAL') {
+      colorCss = '#ef4444'; // Red
+      alpha = 0.65;
+    }
+
+    this.densityEntities.forEach(e => {
+      if (e.ellipse) {
+        e.ellipse.material = new Cesium.ColorMaterialProperty(
+          Cesium.Color.fromCssColorString(colorCss).withAlpha(alpha)
+        );
+        e.ellipse.outlineColor = new Cesium.ConstantProperty(
+          Cesium.Color.fromCssColorString(colorCss).withAlpha(0.85)
+        );
+      }
+    });
+  }
+
+  private updateBottleneckEntities(bottlenecks: { locationName: string; density: number; coordinates: [number, number] }[]): void {
+    if (!this.viewer) return;
+    this.bottleneckEntities.forEach(e => this.viewer?.entities.remove(e));
+    this.bottleneckEntities = [];
+
+    bottlenecks.forEach((b, idx) => {
+      const entity = this.viewer!.entities.add({
+        name: `BOTTLENECK_ALERT_${idx}`,
+        position: Cesium.Cartesian3.fromDegrees(b.coordinates[0], b.coordinates[1], 25),
+        point: {
+          pixelSize: 16,
+          color: Cesium.Color.fromCssColorString('#ef4444'),
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        label: {
+          text: `⚠️ BOTTLENECK (${b.density} pax/m²)`,
+          font: 'bold 11px monospace',
+          fillColor: Cesium.Color.fromCssColorString('#fca5a5'),
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -18),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      });
+      this.bottleneckEntities.push(entity);
+    });
   }
 
   public cleanupCesiumPrimitives(): void {
@@ -497,6 +684,8 @@ export class CrowdSimulationEngine {
     }
     this.bottleneckEntities.forEach(e => this.viewer?.entities.remove(e));
     this.bottleneckEntities = [];
+    this.densityEntities.forEach(e => this.viewer?.entities.remove(e));
+    this.densityEntities = [];
   }
 
   public destroy(): void {
