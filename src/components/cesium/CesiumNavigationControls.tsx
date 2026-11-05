@@ -7,16 +7,20 @@ import {
   ChevronUp, 
   ChevronDown, 
   Compass, 
-  Home,
-  Ruler,
-  Video,
-  Sun,
-  Sunset,
-  Moon,
-  X
+  Home, 
+  Ruler, 
+  Video, 
+  Sun, 
+  Sunset, 
+  Moon, 
+  X,
+  Search,
+  Scan,
+  MapPin
 } from 'lucide-react';
 import { cesiumService } from '../../services/cesiumService';
-import { LightingPreset, MeasurementState } from '../../types/gis';
+import { LightingPreset, MeasurementState, GhatLocation } from '../../types/gis';
+import { GHAT_LOCATIONS } from '../../config/locations';
 
 interface CesiumNavigationControlsProps {
   headingDeg?: number;
@@ -32,12 +36,29 @@ export const CesiumNavigationControls: React.FC<CesiumNavigationControlsProps> =
   const [isTourActive, setIsTourActive] = useState<boolean>(false);
   const [tourStep, setTourStep] = useState<string>('');
   const [lightingPreset, setLightingPreset] = useState<LightingPreset>('DAY');
+  const [sceneMode, setSceneMode] = useState<'3D' | '2D'>('3D');
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [measurement, setMeasurement] = useState<MeasurementState>({
     isActive: false,
     startPoint: null,
     endPoint: null,
     distanceMeters: null,
   });
+
+  const toggle2D3D = () => {
+    const nextMode = cesiumService.toggle2D3D();
+    setSceneMode(nextMode);
+  };
+
+  const handleZoomToAll = () => {
+    cesiumService.zoomToAllGisLayers();
+  };
+
+  const handleSelectLocation = (loc: GhatLocation) => {
+    cesiumService.flyToLocation(loc);
+    setIsSearchOpen(false);
+  };
 
   const toggleTour = () => {
     if (isTourActive) {
@@ -133,6 +154,69 @@ export const CesiumNavigationControls: React.FC<CesiumNavigationControlsProps> =
         </div>
       )}
 
+      {/* Location Search Floating Dropdown */}
+      {isSearchOpen && (
+        <div className="absolute top-20 right-16 z-30 w-80 glass-panel rounded-xl border border-cyan-400/50 shadow-glow-cyan p-3 text-slate-100 animate-in fade-in slide-in-from-right-2">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-700/60">
+            <span className="text-xs font-mono font-bold text-cyan-300 flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5" />
+              FLY TO LANDMARK (WGS84)
+            </span>
+            <button
+              onClick={() => setIsSearchOpen(false)}
+              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-100"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="relative mb-2">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search verified ghats, bridges..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-700 text-xs text-slate-200 placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-400"
+            />
+          </div>
+
+          <div className="max-h-60 overflow-y-auto space-y-1 no-scrollbar">
+            {GHAT_LOCATIONS.filter(g => 
+              g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              (g.teluguName && g.teluguName.includes(searchQuery))
+            ).map((ghat) => (
+              <button
+                key={ghat.id}
+                onClick={() => handleSelectLocation(ghat)}
+                className="w-full p-2 rounded-lg bg-slate-900/70 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/40 text-left transition-all flex items-start justify-between group"
+              >
+                <div>
+                  <div className="text-xs font-medium text-slate-200 group-hover:text-cyan-300 flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                    <span>{ghat.name}</span>
+                  </div>
+                  {ghat.teluguName && (
+                    <div className="text-[10px] text-cyan-400/80 ml-4 font-sans">{ghat.teluguName}</div>
+                  )}
+                  <div className="text-[9px] font-mono text-slate-400 ml-4">
+                    {ghat.coordinates.latitude.toFixed(4)}°N, {ghat.coordinates.longitude.toFixed(4)}°E
+                  </div>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold border ${
+                  ghat.verificationStatus === 'VERIFIED'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}>
+                  {ghat.verificationStatus}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Main Right Controls Stack */}
       <div className="absolute top-20 right-4 z-20 flex flex-col items-center gap-2 select-none">
         {/* Compass Widget */}
@@ -204,6 +288,43 @@ export const CesiumNavigationControls: React.FC<CesiumNavigationControlsProps> =
             title="Orbit Camera Clockwise"
           >
             <RotateCw className="w-4 h-4" />
+          </button>
+
+          <div className="h-px bg-slate-700/60 my-0.5" />
+
+          {/* 2D / 3D Scene Mode Toggle */}
+          <button
+            onClick={toggle2D3D}
+            className={`p-2 rounded-lg font-mono font-bold text-xs transition-colors flex items-center justify-center ${
+              sceneMode === '3D'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/50'
+                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/50'
+            }`}
+            title={`Current View: ${sceneMode}. Click to switch to ${sceneMode === '3D' ? '2D Orthographic' : '3D Globe'}`}
+          >
+            {sceneMode}
+          </button>
+
+          {/* Zoom to All GIS Layers */}
+          <button
+            onClick={handleZoomToAll}
+            className="p-2 rounded-lg bg-slate-800/80 hover:bg-cyan-500/20 text-slate-200 hover:text-cyan-300 transition-colors"
+            title="Zoom to All GIS Layers & River Boundaries"
+          >
+            <Scan className="w-4 h-4" />
+          </button>
+
+          {/* Quick Location Search */}
+          <button
+            onClick={() => setIsSearchOpen(prev => !prev)}
+            className={`p-2 rounded-lg transition-colors ${
+              isSearchOpen
+                ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-400/60'
+                : 'bg-slate-800/80 text-slate-200 hover:bg-cyan-500/20 hover:text-cyan-300'
+            }`}
+            title="Search Verified Landmarks & Ghats"
+          >
+            <Search className="w-4 h-4" />
           </button>
 
           <div className="h-px bg-slate-700/60 my-0.5" />

@@ -14,6 +14,7 @@ import { ScenarioComparisonModal } from '../simulation/ScenarioComparisonModal';
 import { EmergencyCommandCenter } from '../emergency/EmergencyCommandCenter';
 import { AgentInspectorModal } from '../emergency/AgentInspectorModal';
 import { EmergencyScenarioBuilder } from '../emergency/EmergencyScenarioBuilder';
+import { GisValidationModal } from '../panels/GisValidationModal';
 import { 
   LayerVisibilityState, 
   BaseImageryProvider, 
@@ -56,6 +57,7 @@ export const DashboardLayout: React.FC = () => {
   const [isEmergencyPanelOpen, setIsEmergencyPanelOpen] = useState<boolean>(false);
   const [isAgentInspectorOpen, setIsAgentInspectorOpen] = useState<boolean>(false);
   const [isEmergencyScenarioBuilderOpen, setIsEmergencyScenarioBuilderOpen] = useState<boolean>(false);
+  const [isGisValidationOpen, setIsGisValidationOpen] = useState<boolean>(false);
 
   // Selected GIS Location (Pushkar Ghat selected by default for Day 1 discovery)
   const [selectedLocation, setSelectedLocation] = useState<GhatLocation | null>(GHAT_LOCATIONS[0]);
@@ -72,6 +74,10 @@ export const DashboardLayout: React.FC = () => {
     crowdDensityHeatmap: true,
     satelliteOverlay: false,
     labels3D: true,
+    buildings3D: true,
+    osmBuildingFootprints: true,
+    custom3DModels: true,
+    riverWaterSurface: true,
   });
 
   // Terrain Status
@@ -228,6 +234,8 @@ export const DashboardLayout: React.FC = () => {
         isEmergencyCommandCenterOpen={isEmergencyPanelOpen}
         onToggleAgentInspector={() => setIsAgentInspectorOpen(prev => !prev)}
         isAgentInspectorOpen={isAgentInspectorOpen}
+        onToggleGisValidation={() => setIsGisValidationOpen(prev => !prev)}
+        isGisValidationOpen={isGisValidationOpen}
       />
 
       {/* Main Body: Sidebar + Cesium Map Viewport */}
@@ -277,6 +285,7 @@ export const DashboardLayout: React.FC = () => {
             onChangeBaseImagery={setBaseImagery}
             isOpen={isLayersPanelOpen}
             onClose={() => setIsLayersPanelOpen(false)}
+            onOpenGisValidation={() => setIsGisValidationOpen(true)}
           />
 
           {/* Draggable Location Information Panel */}
@@ -355,6 +364,13 @@ export const DashboardLayout: React.FC = () => {
           <ModuleDetailModal
             module={inspectedModule}
             onClose={() => setInspectedModule(null)}
+          />
+
+          {/* GIS Data Quality & WGS84 Validation Audit Modal */}
+          <GisValidationModal
+            isOpen={isGisValidationOpen}
+            onClose={() => setIsGisValidationOpen(false)}
+            onSelectLocation={setSelectedLocation}
           />
         </main>
       </div>

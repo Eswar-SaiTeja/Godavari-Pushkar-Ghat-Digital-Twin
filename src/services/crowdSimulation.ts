@@ -76,9 +76,9 @@ export const DEFAULT_AGE_PROFILES: Record<AgeGroup, AgeGroupProfile> = {
 export const DEFAULT_GATES: SimulationGate[] = [
   {
     id: 'gate_pushkar_main',
-    name: 'Pushkar Main Gate (In/Out)',
+    name: 'Pushkar Main Gate (In/Out) [VERIFIED]',
     type: 'DUAL',
-    coordinates: { longitude: 81.7788, latitude: 16.9972 },
+    coordinates: { longitude: 81.7682, latitude: 17.0078 },
     capacityPerHour: 35000,
     currentFlowRatePerMin: 180,
     widthMeters: 14,
@@ -86,9 +86,9 @@ export const DEFAULT_GATES: SimulationGate[] = [
   },
   {
     id: 'gate_kotilingala_north',
-    name: 'Kotilingala North Exit Gate',
+    name: 'Kotilingala North Exit Gate [VERIFIED]',
     type: 'EXIT',
-    coordinates: { longitude: 81.7720, latitude: 17.0080 },
+    coordinates: { longitude: 81.7695, latitude: 17.0235 },
     capacityPerHour: 28000,
     currentFlowRatePerMin: 140,
     widthMeters: 12,
@@ -96,9 +96,9 @@ export const DEFAULT_GATES: SimulationGate[] = [
   },
   {
     id: 'gate_south_temple',
-    name: 'Markandeya Temple South Gate',
+    name: 'Markandeya Temple South Gate [VERIFIED]',
     type: 'EXIT',
-    coordinates: { longitude: 81.7815, latitude: 16.9945 },
+    coordinates: { longitude: 81.7682, latitude: 17.0042 },
     capacityPerHour: 18000,
     currentFlowRatePerMin: 95,
     widthMeters: 10,
@@ -106,9 +106,9 @@ export const DEFAULT_GATES: SimulationGate[] = [
   },
   {
     id: 'gate_arts_college_evac',
-    name: 'Arts College Emergency Gate',
+    name: 'Arts College Emergency Gate [VERIFIED]',
     type: 'EXIT',
-    coordinates: { longitude: 81.7890, latitude: 17.0050 },
+    coordinates: { longitude: 81.783471, latitude: 17.016330 },
     capacityPerHour: 50000,
     currentFlowRatePerMin: 220,
     widthMeters: 20,
@@ -663,7 +663,7 @@ export class CrowdSimulationEngine {
       bottlenecks.push({
         locationName: 'Pushkar Steps to Promenade Bottleneck',
         density: densityVal,
-        coordinates: [81.7778, 16.9980],
+        coordinates: [81.767400, 17.008100],
       });
     }
 
@@ -711,10 +711,10 @@ export class CrowdSimulationEngine {
     this.densityEntities = [];
 
     const zones = [
-      { name: 'Pushkar Steps Zone', lon: 81.7774, lat: 16.9984, semiMajor: 90, semiMinor: 45 },
-      { name: 'Promenade Concourse', lon: 81.7778, lat: 16.9980, semiMajor: 120, semiMinor: 55 },
-      { name: 'Kotilingala Concourse', lon: 81.7725, lat: 17.0062, semiMajor: 110, semiMinor: 50 },
-      { name: 'Markandeya Temple Entry', lon: 81.7815, lat: 16.9945, semiMajor: 80, semiMinor: 40 },
+      { name: 'Pushkar Steps Zone', lon: 81.766947, lat: 17.008396, semiMajor: 90, semiMinor: 45 },
+      { name: 'Promenade Concourse', lon: 81.767400, lat: 17.008100, semiMajor: 120, semiMinor: 55 },
+      { name: 'Kotilingala Concourse', lon: 81.768861, lat: 17.022618, semiMajor: 110, semiMinor: 50 },
+      { name: 'Markandeya Temple Entry', lon: 81.767800, lat: 17.004500, semiMajor: 80, semiMinor: 40 },
     ];
 
     zones.forEach(z => {

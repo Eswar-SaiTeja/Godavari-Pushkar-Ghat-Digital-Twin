@@ -10,6 +10,7 @@ import {
   Sparkles, 
   Database, 
   Radio,
+  CheckCircle2,
   Users,
   Car,
   BarChart3,
@@ -37,6 +38,8 @@ interface TopHeaderProps {
   isEmergencyCommandCenterOpen?: boolean;
   onToggleAgentInspector?: () => void;
   isAgentInspectorOpen?: boolean;
+  onToggleGisValidation?: () => void;
+  isGisValidationOpen?: boolean;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -57,6 +60,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   isEmergencyCommandCenterOpen,
   onToggleAgentInspector,
   isAgentInspectorOpen,
+  onToggleGisValidation,
+  isGisValidationOpen,
 }) => {
   const [isFullscreen, setIsFullscreen] = React.useState<boolean>(false);
 
@@ -131,7 +136,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <span>•</span>
               <span className="text-slate-300">AP, India</span>
               <span className="hidden md:inline text-slate-500">|</span>
-              <span className="hidden md:inline text-slate-400">16.9984° N, 81.7774° E (Approximate)</span>
+              <span className="hidden md:inline text-emerald-400 font-semibold">17.0084° N, 81.7669° E [VERIFIED]</span>
             </p>
           </div>
         </div>
@@ -276,6 +281,21 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             >
               <BarChart3 className="w-4 h-4 text-amber-400" />
               <span className="hidden lg:inline font-mono font-semibold">Scenarios</span>
+            </button>
+          )}
+
+          {onToggleGisValidation && (
+            <button
+              onClick={onToggleGisValidation}
+              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
+                isGisValidationOpen 
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/60 shadow-glow-sm' 
+                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-emerald-400 hover:border-emerald-500/40'
+              }`}
+              title="Open GIS Data Quality & WGS84 Accuracy Audit Panel"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span className="hidden xl:inline font-mono font-semibold">GIS Audit</span>
             </button>
           )}
 

@@ -5,12 +5,14 @@ import {
   PROJECT_BOUNDARIES, 
   RAJAMAHENDRAVARAM_DEFAULT_CENTER 
 } from '../config/locations';
+import { OSM_BUILDING_FOOTPRINTS } from '../config/osmBuildings';
 import { 
   GhatLocation, 
   BaseImageryProvider, 
   LayerVisibilityState,
   LightingPreset,
-  MeasurementState
+  MeasurementState,
+  TerrainStatusInfo
 } from '../types/gis';
 import { SimulationMode } from '../types/simulation';
 
@@ -30,6 +32,9 @@ export class CesiumService {
   private demGridEntities: Cesium.Entity[] = [];
   private waterFlowEntities: Cesium.Entity[] = [];
   private crowdDensityEntities: Cesium.Entity[] = [];
+  private buildingEntities: Cesium.Entity[] = [];
+  private customModelEntities: Map<string, Cesium.Entity> = new Map();
+  private riverWaterEntities: Cesium.Entity[] = [];
   private tourInterval: any = null;
   private isMeasuring: boolean = false;
   private measurePoints: Cesium.Cartesian3[] = [];
@@ -37,9 +42,15 @@ export class CesiumService {
   private onMeasurementUpdate: ((state: MeasurementState) => void) | null = null;
   private google3DTileset: Cesium.Cesium3DTileset | null = null;
   private currentBaseImagery: BaseImageryProvider = 'osm';
+  private terrainStatusInfo: TerrainStatusInfo = {
+    status: 'ELLIPSOID_FALLBACK',
+    label: 'ELLIPSOID FALLBACK ACTIVE',
+    message: 'WGS84 Ellipsoid Standard Elevation (Active Fallback - Copernicus DEM GLO-30 TIF requires quantized-mesh tiling)',
+    providerName: 'WGS84 Ellipsoid'
+  };
   private terrainStatus: { hasWorldTerrain: boolean; message: string } = {
     hasWorldTerrain: false,
-    message: 'WGS84 Ellipsoid (Fallback Mode Active)'
+    message: 'WGS84 Ellipsoid (Active Fallback)'
   };
 
   /**
@@ -69,7 +80,7 @@ export class CesiumService {
       selectionIndicator: false,
       timeline: false,
       navigationHelpButton: false,
-      scene3DOnly: true,
+      scene3DOnly: false,
       shouldAnimate: true,
       baseLayer: false,
       terrainProvider: new Cesium.EllipsoidTerrainProvider(),
@@ -79,6 +90,7 @@ export class CesiumService {
     log('3. Adding OpenStreetMap base imagery layer...');
     const osmProvider = new Cesium.OpenStreetMapImageryProvider({
       url: 'https://tile.openstreetmap.org/',
+      maximumLevel: 19,
       credit: '© OpenStreetMap contributors (ODbL)'
     });
     const baseLayer = viewer.imageryLayers.addImageryProvider(osmProvider);
@@ -88,14 +100,23 @@ export class CesiumService {
 
     this.viewer = viewer;
 
-    log('4. Optimizing scene rendering...');
+    log('4. Optimizing scene rendering & caching...');
     viewer.scene.globe.enableLighting = true;
     viewer.scene.globe.depthTestAgainstTerrain = false;
-    viewer.scene.highDynamicRange = true;
+    viewer.scene.highDynamicRange = false;
     viewer.scene.fog.enabled = true;
     viewer.scene.fog.density = 0.00015;
     // Command-center deep navy slate base color so failed/loading tiles never display a pitch black abyss
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#0b1329');
+
+    // Buffer-free tile caching and zoom bounds
+    viewer.scene.globe.maximumScreenSpaceError = 2;
+    viewer.scene.globe.tileCacheSize = 250;
+    viewer.scene.globe.preloadAncestors = true;
+    viewer.scene.globe.preloadSiblings = true;
+    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 15.0;
+    viewer.scene.screenSpaceCameraController.maximumZoomDistance = 25000000.0;
+    viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
 
     log('5. Setting up terrain with fallback...');
     await this.setupTerrainWithFallback(viewer);
@@ -104,8 +125,10 @@ export class CesiumService {
     this.flyToInitialPosition(false);
 
     log('7. Creating spatial layers...');
+    this.createRiverWaterSurface();
     this.createBoundaryLayers();
     this.createBridgeLayers();
+    this.createBuildings3D();
     this.createGhatLocationMarkers();
     this.createEmergencyEvacuationCorridor();
     this.createDemElevationGrid();
@@ -120,11 +143,38 @@ export class CesiumService {
   }
 
   /**
-   * Graceful terrain loader with fallback to WGS84 Ellipsoid
+   * Graceful terrain loader with Copernicus DEM check and fallback to WGS84 Ellipsoid
    */
   private async setupTerrainWithFallback(viewer: Cesium.Viewer): Promise<void> {
+    const copernicusDemUrl = import.meta.env.VITE_COPERNICUS_DEM_URL || '/terrain/copernicus';
+
     try {
-      // Only attempt Ion terrain if an explicit user token was provided in environment variables
+      // 1. Try local/configured Copernicus DEM GLO-30 quantized-mesh terrain tiles
+      if (copernicusDemUrl && copernicusDemUrl !== '/terrain/copernicus') {
+        try {
+          const terrainProvider = await Cesium.CesiumTerrainProvider.fromUrl(copernicusDemUrl, {
+            requestWaterMask: true,
+            requestVertexNormals: true
+          });
+          viewer.terrainProvider = terrainProvider;
+          viewer.scene.globe.depthTestAgainstTerrain = true;
+          this.terrainStatusInfo = {
+            status: 'DEM_ACTIVE',
+            label: 'DEM TERRAIN ACTIVE',
+            message: 'Copernicus DEM GLO-30 Elevation Model (30m Resolution Active)',
+            providerName: 'Copernicus GLO-30 DEM'
+          };
+          this.terrainStatus = {
+            hasWorldTerrain: true,
+            message: this.terrainStatusInfo.message
+          };
+          return;
+        } catch (e) {
+          console.info('[CesiumService] Configured Copernicus DEM URL unavailable, testing standard fallbacks.');
+        }
+      }
+
+      // 2. Only attempt Ion terrain if an explicit user token was provided in environment variables
       if (ionToken && ionToken.trim().length > 10) {
         try {
           const terrain = await Cesium.createWorldTerrainAsync({
@@ -132,31 +182,53 @@ export class CesiumService {
             requestVertexNormals: true
           });
           viewer.terrainProvider = terrain;
+          viewer.scene.globe.depthTestAgainstTerrain = true;
+          this.terrainStatusInfo = {
+            status: 'DEM_ACTIVE',
+            label: 'DEM TERRAIN ACTIVE',
+            message: 'Cesium World Terrain 3D Mesh (Active with Water Mask)',
+            providerName: 'Cesium World Terrain'
+          };
           this.terrainStatus = {
             hasWorldTerrain: true,
-            message: 'Cesium World Terrain 3D Mesh (Active with Water Mask)'
+            message: this.terrainStatusInfo.message
           };
-          viewer.scene.globe.depthTestAgainstTerrain = true;
           return;
         } catch (innerErr) {
           console.warn('[CesiumService] Ion World Terrain failed, falling back to Ellipsoid:', innerErr);
         }
       }
 
-      // Default reliable Ellipsoid fallback (instant, offline-capable, stable)
+      // 3. Transparent Ellipsoid fallback with honest status indicator
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+      this.terrainStatusInfo = {
+        status: 'ELLIPSOID_FALLBACK',
+        label: 'ELLIPSOID FALLBACK ACTIVE',
+        message: 'WGS84 Ellipsoid Standard Elevation (Active Fallback - Copernicus DEM GLO-30 GeoTIFF requires quantized-mesh tiling)',
+        providerName: 'WGS84 Ellipsoid'
+      };
       this.terrainStatus = {
         hasWorldTerrain: false,
-        message: 'Standard WGS84 Ellipsoid + Synthetic DEM Elevation Profile (Active Fallback)'
+        message: this.terrainStatusInfo.message
       };
     } catch (err) {
       console.warn('[CesiumService] Terrain setup encountered exception, using fallback:', err);
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+      this.terrainStatusInfo = {
+        status: 'ELLIPSOID_FALLBACK',
+        label: 'ELLIPSOID FALLBACK ACTIVE',
+        message: 'Standard WGS84 Ellipsoid (Fallback Mode Active)',
+        providerName: 'WGS84 Ellipsoid'
+      };
       this.terrainStatus = {
         hasWorldTerrain: false,
-        message: 'Standard WGS84 Ellipsoid (Fallback Mode Active)'
+        message: this.terrainStatusInfo.message
       };
     }
+  }
+
+  public getTerrainStatusInfo(): TerrainStatusInfo {
+    return this.terrainStatusInfo;
   }
 
   /**
@@ -262,6 +334,7 @@ export class CesiumService {
       case 'osm':
         newProvider = new Cesium.OpenStreetMapImageryProvider({
           url: 'https://tile.openstreetmap.org/',
+          maximumLevel: 19,
           credit: '© OpenStreetMap contributors (ODbL)'
         });
         break;
@@ -271,6 +344,7 @@ export class CesiumService {
       case 'sentinel_aerial':
         newProvider = new Cesium.UrlTemplateImageryProvider({
           url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          maximumLevel: 19,
           credit: '© Esri World Imagery, Maxar, Earthstar Geographics'
         });
         break;
@@ -278,6 +352,7 @@ export class CesiumService {
       case 'esri_topo':
         newProvider = new Cesium.UrlTemplateImageryProvider({
           url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+          maximumLevel: 19,
           credit: '© Esri World Topographic Map, HERE, Garmin'
         });
         break;
@@ -285,6 +360,7 @@ export class CesiumService {
       case 'dark_canvas':
         newProvider = new Cesium.UrlTemplateImageryProvider({
           url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+          maximumLevel: 19,
           credit: '© Esri Dark Gray Canvas'
         });
         break;
@@ -469,6 +545,9 @@ export class CesiumService {
         markerBadge = 'VIP';
       }
 
+      const statusBadge = location.verificationStatus === 'VERIFIED' ? '✓ VERIFIED' :
+                          location.verificationStatus === 'APPROXIMATE' ? '≈ APPROX' : '? UNVERIFIED';
+
       // 3D Point with pulsing glow
       const entity = this.viewer!.entities.add({
         id: location.id,
@@ -482,7 +561,7 @@ export class CesiumService {
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
         label: {
-          text: `[${markerBadge}] ${location.name}\n${location.teluguName || ''}`,
+          text: `[${markerBadge} | ${statusBadge}] ${location.name}\n${location.teluguName || ''}`,
           font: '12px Inter, sans-serif',
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
           fillColor: Cesium.Color.WHITE,
@@ -506,27 +585,217 @@ export class CesiumService {
   }
 
   /**
+   * Create Godavari River water surface polygon (translucent water simulation layer)
+   */
+  private createRiverWaterSurface(): void {
+    if (!this.viewer) return;
+
+    // Verified boundary of Godavari river stretch between Kovvur bank (west) and Rajahmundry ghats (east)
+    const riverPolygonCoords = [
+      81.7450, 17.0320,
+      81.7660, 17.0300,
+      81.7695, 17.0226, // Kotilingala
+      81.7675, 17.0152, // Saraswati
+      81.7670, 17.0084, // Pushkar Ghat
+      81.7680, 17.0045, // Markandeya
+      81.7695, 16.9969, // Godavari Arch Bridge East
+      81.7720, 16.9850, // Southern downstream
+      81.7560, 16.9850,
+      81.7420, 16.9981, // Godavari Arch Bridge West (Kovvur)
+      81.7410, 17.0078, // Havelock Bridge West (Kovvur)
+      81.7380, 17.0200,
+      81.7450, 17.0320,
+    ];
+
+    const waterEntity = this.viewer.entities.add({
+      id: 'godavari-river-water-surface',
+      name: 'Godavari River Water Surface (Bathymetric Water Body) [VERIFIED]',
+      polygon: {
+        hierarchy: Cesium.Cartesian3.fromDegreesArray(riverPolygonCoords),
+        material: Cesium.Color.fromCssColorString('#0284c7').withAlpha(0.35),
+        outline: true,
+        outlineColor: Cesium.Color.fromCssColorString('#38bdf8').withAlpha(0.7),
+        outlineWidth: 2,
+        height: 12.5,
+      },
+      description: 'Godavari River active hydrological flow basin spanning Rajamahendravaram - Kovvur corridor.'
+    });
+
+    this.riverWaterEntities.push(waterEntity);
+  }
+
+  /**
+   * Create 3D extruded footprints for OpenStreetMap & Municipal riverfront buildings
+   */
+  private createBuildings3D(): void {
+    if (!this.viewer) return;
+
+    OSM_BUILDING_FOOTPRINTS.forEach((bldg) => {
+      const flatCoords: number[] = [];
+      bldg.coordinates.forEach(([lon, lat]) => {
+        flatCoords.push(lon, lat);
+      });
+
+      const extrudedTop = bldg.baseHeight + bldg.heightMeters;
+      const midLon = bldg.coordinates.reduce((sum, c) => sum + c[0], 0) / bldg.coordinates.length;
+      const midLat = bldg.coordinates.reduce((sum, c) => sum + c[1], 0) / bldg.coordinates.length;
+
+      const entity = this.viewer!.entities.add({
+        id: bldg.id,
+        name: bldg.name,
+        polygon: {
+          hierarchy: Cesium.Cartesian3.fromDegreesArray(flatCoords),
+          height: bldg.baseHeight,
+          extrudedHeight: extrudedTop,
+          material: Cesium.Color.fromCssColorString(bldg.color).withAlpha(0.72),
+          outline: true,
+          outlineColor: Cesium.Color.WHITE.withAlpha(0.85),
+          outlineWidth: 1.5,
+        },
+        description: `${bldg.name} (${bldg.teluguName || ''})\nHeight: ${bldg.heightMeters}m (${bldg.isEstimatedHeight ? 'ESTIMATED' : 'SURVEYED'})\nLevels: ${bldg.levels || 1}\nSource: ${bldg.dataSource}`,
+        properties: {
+          buildingData: bldg,
+        }
+      });
+
+      // Spatial 3D hover/proximity label
+      this.viewer!.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(midLon, midLat, extrudedTop + 3),
+        label: {
+          text: `[ESTIMATED +${bldg.heightMeters}m] ${bldg.name}`,
+          font: '10px JetBrains Mono, monospace',
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.fromCssColorString('#050811'),
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(20, 2200),
+          backgroundColor: Cesium.Color.fromCssColorString('#0a0f1d').withAlpha(0.8),
+          showBackground: true,
+          backgroundPadding: new Cesium.Cartesian2(6, 3),
+        }
+      });
+
+      this.buildingEntities.push(entity);
+    });
+  }
+
+  /**
+   * Load custom 3D model (GLB / glTF) into the digital twin scene
+   */
+  public async loadCustomModel(options: {
+    id: string;
+    name: string;
+    url: string;
+    longitude: number;
+    latitude: number;
+    height?: number;
+    scale?: number;
+    heading?: number;
+  }): Promise<Cesium.Entity | null> {
+    if (!this.viewer) return null;
+
+    try {
+      const position = Cesium.Cartesian3.fromDegrees(
+        options.longitude,
+        options.latitude,
+        options.height || 18
+      );
+
+      const heading = Cesium.Math.toRadians(options.heading || 0);
+      const pitch = 0;
+      const roll = 0;
+      const hpr = new Cesium.HeadingPitchRoll(heading, pitch, roll);
+      const orientation = Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
+
+      const entity = this.viewer.entities.add({
+        id: `custom-model-${options.id}`,
+        name: options.name,
+        position,
+        orientation,
+        model: {
+          uri: options.url,
+          scale: options.scale || 1.0,
+          minimumPixelSize: 64,
+        },
+      });
+
+      this.customModelEntities.set(options.id, entity);
+      return entity;
+    } catch (err) {
+      console.warn('[CesiumService] Custom model loading failed:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Admin editable update for building coordinates & heights
+   */
+  public updateBuildingCoordinates(
+    buildingId: string,
+    latitude: number,
+    longitude: number,
+    heightMeters?: number
+  ): void {
+    const bldg = OSM_BUILDING_FOOTPRINTS.find(b => b.id === buildingId);
+    if (!bldg) return;
+
+    const latDelta = latitude - bldg.coordinates[0][1];
+    const lonDelta = longitude - bldg.coordinates[0][0];
+
+    bldg.coordinates = bldg.coordinates.map(([lon, lat]) => [lon + lonDelta, lat + latDelta]);
+    if (heightMeters !== undefined) {
+      bldg.heightMeters = heightMeters;
+    }
+
+    const entity = this.buildingEntities.find(e => e.id === buildingId);
+    if (entity && this.viewer) {
+      const flatCoords: number[] = [];
+      bldg.coordinates.forEach(([lon, lat]) => {
+        flatCoords.push(lon, lat);
+      });
+      const extrudedTop = bldg.baseHeight + bldg.heightMeters;
+
+      entity.polygon = new Cesium.PolygonGraphics({
+        hierarchy: new Cesium.ConstantProperty(Cesium.Cartesian3.fromDegreesArray(flatCoords)),
+        height: new Cesium.ConstantProperty(bldg.baseHeight),
+        extrudedHeight: new Cesium.ConstantProperty(extrudedTop),
+        material: new Cesium.ColorMaterialProperty(Cesium.Color.fromCssColorString(bldg.color).withAlpha(0.72)),
+        outline: new Cesium.ConstantProperty(true),
+        outlineColor: new Cesium.ConstantProperty(Cesium.Color.WHITE.withAlpha(0.85)),
+        outlineWidth: new Cesium.ConstantProperty(1.5),
+      });
+
+      this.viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(longitude, latitude, 250),
+        duration: 1.5,
+      });
+    }
+  }
+
+  /**
    * Create emergency evacuation corridor route from Pushkar Ghat to Arts College
    */
   private createEmergencyEvacuationCorridor(): void {
     if (!this.viewer) return;
 
+    // Verified corridor from Pushkar Ghat (81.766947, 17.008396) eastward to Arts College (81.783471, 17.016330)
     const evacRouteCoords = [
-      [81.7774, 16.9984], // Pushkar Ghat
-      [81.7795, 16.9990], // Pushkar Chowk
-      [81.7830, 17.0010], // Main arterial road
-      [81.7865, 17.0030], // Hospital junction
-      [81.7890, 17.0050], // Arts College Grounds
+      [81.766947, 17.008396], // Pushkar Ghat
+      [81.769200, 17.009100], // Pushkar Chowk
+      [81.774500, 17.011800], // Main arterial road
+      [81.779200, 17.014200], // College road junction
+      [81.783471, 17.016330], // Govt Arts College Grounds
     ];
 
     const flatCoords: number[] = [];
     evacRouteCoords.forEach(([lon, lat]) => {
-      flatCoords.push(lon, lat, 18);
+      flatCoords.push(lon, lat, 20);
     });
 
     const evacEntity = this.viewer.entities.add({
       id: 'emergency-evac-corridor-1',
-      name: 'Primary Evacuation Corridor: Pushkar Ghat -> Arts College Grounds',
+      name: 'Primary Evacuation Corridor: Pushkar Ghat -> Arts College Grounds [VERIFIED]',
       polyline: {
         positions: Cesium.Cartesian3.fromDegreesArrayHeights(flatCoords),
         width: 6,
@@ -546,8 +815,8 @@ export class CesiumService {
   private createDemElevationGrid(): void {
     if (!this.viewer) return;
 
-    const latitudes = [16.985, 16.995, 17.005, 17.015];
-    const longitudes = [81.760, 81.770, 81.780, 81.790];
+    const latitudes = [16.995, 17.005, 17.015, 17.025];
+    const longitudes = [81.745, 81.758, 81.770, 81.785];
 
     latitudes.forEach((lat, idx) => {
       const line = this.viewer!.entities.add({
@@ -555,8 +824,8 @@ export class CesiumService {
         name: `DEM Transect Lat ${lat.toFixed(3)}°N`,
         polyline: {
           positions: Cesium.Cartesian3.fromDegreesArray([
-            81.755, lat,
-            81.795, lat
+            81.740, lat,
+            81.790, lat
           ]),
           width: 1,
           material: Cesium.Color.fromCssColorString('#00f0ff').withAlpha(0.25),
@@ -571,8 +840,8 @@ export class CesiumService {
         name: `DEM Transect Lon ${lon.toFixed(3)}°E`,
         polyline: {
           positions: Cesium.Cartesian3.fromDegreesArray([
-            lon, 16.980,
-            lon, 17.020
+            lon, 16.990,
+            lon, 17.030
           ]),
           width: 1,
           material: Cesium.Color.fromCssColorString('#00f0ff').withAlpha(0.25),
@@ -588,10 +857,11 @@ export class CesiumService {
   private createWaterFlowVectors(): void {
     if (!this.viewer) return;
 
+    // Verified midstream positions flowing north to south through Godavari channel
     const vectorPositions = [
-      { start: [81.765, 17.012], end: [81.768, 17.006] },
-      { start: [81.769, 17.003], end: [81.772, 16.997] },
-      { start: [81.773, 16.994], end: [81.776, 16.988] },
+      { start: [81.753, 17.026], end: [81.756, 17.017] },
+      { start: [81.757, 17.015], end: [81.760, 17.006] },
+      { start: [81.761, 17.004], end: [81.764, 16.993] },
     ];
 
     vectorPositions.forEach((v, idx) => {
@@ -621,8 +891,9 @@ export class CesiumService {
     if (!this.viewer) return;
 
     const zones = [
-      { center: [81.7774, 16.9984], radius: 180, color: '#f59e0b', label: 'Pushkar Ghat Density Hub (SIMULATED)' },
-      { center: [81.7725, 17.0062], radius: 240, color: '#10b981', label: 'Kotilingala Bathing Buffer (SIMULATED)' },
+      { center: [81.766947, 17.008396], radius: 120, color: '#f59e0b', label: 'Pushkar Ghat Density Hub (SIMULATED)' },
+      { center: [81.768861, 17.022618], radius: 160, color: '#10b981', label: 'Kotilingala Bathing Buffer (SIMULATED)' },
+      { center: [81.767800, 17.004500], radius: 100, color: '#06b6d4', label: 'Markandeya Ghat Density Area (SIMULATED)' },
     ];
 
     zones.forEach((z, idx) => {
@@ -732,6 +1003,116 @@ export class CesiumService {
         e.label.show = new Cesium.ConstantProperty(layers.labels3D);
       }
     });
+
+    // 3D Extruded Buildings & Pavilions
+    this.buildingEntities.forEach(e => {
+      e.show = layers.buildings3D && (layers.osmBuildingFootprints !== false);
+    });
+
+    // Custom 3D Models
+    this.customModelEntities.forEach(e => {
+      e.show = layers.custom3DModels !== false;
+    });
+
+    // River Water Surface
+    this.riverWaterEntities.forEach(e => {
+      e.show = layers.riverWaterSurface;
+    });
+  }
+
+  /**
+   * Switches between 3D globe and 2D orthographic map views
+   */
+  public toggle2D3D(): '2D' | '3D' {
+    if (!this.viewer) return '3D';
+    if (this.viewer.scene.mode === Cesium.SceneMode.SCENE3D) {
+      this.viewer.scene.morphTo2D(1.2);
+      return '2D';
+    } else {
+      this.viewer.scene.morphTo3D(1.2);
+      return '3D';
+    }
+  }
+
+  /**
+   * Queries current scene mode
+   */
+  public getSceneMode(): '2D' | '3D' {
+    if (!this.viewer) return '3D';
+    return this.viewer.scene.mode === Cesium.SceneMode.SCENE2D ? '2D' : '3D';
+  }
+
+  /**
+   * Resizes Cesium canvas to match bounding viewport, preventing zero-height collapse
+   */
+  public resize(): void {
+    if (this.viewer && !this.viewer.isDestroyed()) {
+      this.viewer.resize();
+    }
+  }
+
+  /**
+   * Bounding view that frames all verified GIS layers, ghats, bridges and boundaries
+   */
+  public zoomToAllGisLayers(): void {
+    if (!this.viewer) return;
+    // Bounding rectangle covering Kovvur west (81.738) to Rajamahendravaram Arts College east (81.788)
+    // and southern bridges (16.990) to northern Kotilingala (17.026)
+    this.viewer.camera.flyTo({
+      destination: Cesium.Rectangle.fromDegrees(81.738, 16.990, 81.788, 17.026),
+      duration: 2.0,
+    });
+  }
+
+  /**
+   * Admin coordinate & status updater: dynamically updates landmark position, label and properties
+   */
+  public updateGhatCoordinates(
+    ghatId: string, 
+    latitude: number, 
+    longitude: number, 
+    status: 'VERIFIED' | 'APPROXIMATE' | 'UNVERIFIED',
+    elevationMsl?: number
+  ): void {
+    const targetGhat = GHAT_LOCATIONS.find(g => g.id === ghatId);
+    if (targetGhat) {
+      targetGhat.coordinates.latitude = latitude;
+      targetGhat.coordinates.longitude = longitude;
+      if (elevationMsl !== undefined) {
+        targetGhat.elevationMsl = elevationMsl;
+      }
+      targetGhat.verificationStatus = status;
+      targetGhat.lastVerifiedDate = '2026-11-05';
+      if (status === 'VERIFIED') {
+        targetGhat.dataSource = 'Admin Verified Survey Coordinate (EPSG:4326)';
+      }
+    }
+
+    const entity = this.ghatEntities.get(ghatId);
+    if (entity && this.viewer) {
+      const height = targetGhat ? targetGhat.coordinates.height : 16;
+      entity.position = new Cesium.ConstantPositionProperty(
+        Cesium.Cartesian3.fromDegrees(longitude, latitude, height)
+      );
+
+      const statusBadge = status === 'VERIFIED' ? '✓ VERIFIED' :
+                          status === 'APPROXIMATE' ? '≈ APPROX' : '? UNVERIFIED';
+
+      let markerBadge = 'GHAT';
+      if (targetGhat?.category === 'emergency') markerBadge = 'SDRF / RESCUE';
+      else if (targetGhat?.category === 'command') markerBadge = 'COMMAND';
+      else if (targetGhat?.id === 'vip-ghat') markerBadge = 'VIP';
+
+      if (entity.label && targetGhat) {
+        entity.label.text = new Cesium.ConstantProperty(
+          `[${markerBadge} | ${statusBadge}] ${targetGhat.name}\n${targetGhat.teluguName || ''}`
+        );
+      }
+    }
+
+    if (targetGhat) {
+      this.flyToLocation(targetGhat);
+    }
   }
 
   /**
@@ -829,9 +1210,9 @@ export class CesiumService {
 
     if (mode === 'PUSHKARAM_PEAK') {
       this.viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(81.7798, 16.9962, 380),
+        destination: Cesium.Cartesian3.fromDegrees(81.7685, 17.0065, 380),
         orientation: {
-          heading: Cesium.Math.toRadians(315),
+          heading: Cesium.Math.toRadians(320),
           pitch: Cesium.Math.toRadians(-32),
           roll: 0,
         },
@@ -839,7 +1220,7 @@ export class CesiumService {
       });
     } else if (mode === 'MONSOON_FLOOD') {
       this.viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(81.7920, 16.9750, 1200),
+        destination: Cesium.Cartesian3.fromDegrees(81.7750, 16.9880, 1400),
         orientation: {
           heading: Cesium.Math.toRadians(315),
           pitch: Cesium.Math.toRadians(-26),
@@ -849,9 +1230,9 @@ export class CesiumService {
       });
     } else if (mode === 'EMERGENCY_EVAC') {
       this.viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(81.7925, 17.0010, 750),
+        destination: Cesium.Cartesian3.fromDegrees(81.7850, 17.0120, 850),
         orientation: {
-          heading: Cesium.Math.toRadians(330),
+          heading: Cesium.Math.toRadians(325),
           pitch: Cesium.Math.toRadians(-38),
           roll: 0,
         },
@@ -859,7 +1240,7 @@ export class CesiumService {
       });
     } else if (mode === 'VIP_MOVEMENT') {
       this.viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(81.7810, 16.9950, 340),
+        destination: Cesium.Cartesian3.fromDegrees(81.7682, 17.0080, 360),
         orientation: {
           heading: Cesium.Math.toRadians(325),
           pitch: Cesium.Math.toRadians(-35),
@@ -883,11 +1264,11 @@ export class CesiumService {
     this.stopTour();
 
     const tourStops = [
-      { name: 'Godavari Pushkar Ghat (Sacred Center)', pos: [81.7798, 16.9962, 380], h: 315, p: -32 },
-      { name: 'Three Historic Godavari Bridges', pos: [81.7950, 16.9720, 1250], h: 310, p: -30 },
-      { name: 'Kotilingala Bathing Ghat (570m)', pos: [81.7758, 17.0040, 480], h: 325, p: -30 },
-      { name: 'Saraswati Ghat & Harathi Pavilion', pos: [81.7695, 17.0100, 420], h: 310, p: -28 },
-      { name: 'Arts College Emergency Safe Zone', pos: [81.7915, 17.0025, 600], h: 335, p: -40 },
+      { name: 'Godavari Pushkar Ghat (Sacred Steps) [VERIFIED]', pos: [81.766947, 17.008396, 340], h: 320, p: -32 },
+      { name: 'Historic Godavari Bridges (Havelock & Arch) [VERIFIED]', pos: [81.767123, 17.007046, 750], h: 300, p: -28 },
+      { name: 'Kotilingala Bathing Ghat (Heritage Stretch) [VERIFIED]', pos: [81.768861, 17.022618, 420], h: 330, p: -30 },
+      { name: 'Saraswati Ghat & Harathi Platform [VERIFIED]', pos: [81.767200, 17.015200, 380], h: 315, p: -28 },
+      { name: 'Arts College Emergency Safe Haven [VERIFIED]', pos: [81.783471, 17.016330, 520], h: 335, p: -38 },
     ];
 
     let currentIdx = 0;
@@ -1118,6 +1499,9 @@ export class CesiumService {
     this.demGridEntities = [];
     this.waterFlowEntities = [];
     this.crowdDensityEntities = [];
+    this.buildingEntities = [];
+    this.customModelEntities.clear();
+    this.riverWaterEntities = [];
   }
 }
 

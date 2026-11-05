@@ -26,8 +26,8 @@ export const CesiumViewer: React.FC<CesiumViewerProps> = ({
     headingDeg: number;
     pitchDeg: number;
   }>({
-    longitude: 81.7774,
-    latitude: 16.9984,
+    longitude: 81.7669,
+    latitude: 17.0084,
     altitudeMeters: 1450,
     headingDeg: 320,
     pitchDeg: -38,
@@ -107,6 +107,21 @@ export const CesiumViewer: React.FC<CesiumViewerProps> = ({
   useEffect(() => {
     cesiumService.updateLayerVisibility(layers);
   }, [layers]);
+
+  // Responsive canvas resizing to prevent zero-height collapse
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver(() => {
+      cesiumService.resize();
+    });
+    observer.observe(containerRef.current);
+    window.addEventListener('resize', () => cesiumService.resize());
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', () => cesiumService.resize());
+    };
+  }, []);
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-[#050811]">
