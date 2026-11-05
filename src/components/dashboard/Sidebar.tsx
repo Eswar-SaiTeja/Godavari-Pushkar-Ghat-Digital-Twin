@@ -48,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case 'Ship': return <Ship className="w-5 h-5 flex-shrink-0" />;
       case 'Activity': return <Activity className="w-5 h-5 flex-shrink-0" />;
       case 'Database': return <Database className="w-5 h-5 flex-shrink-0" />;
+      case 'Radio': return <Radio className="w-5 h-5 flex-shrink-0" />;
       case 'Settings': return <Settings className="w-5 h-5 flex-shrink-0" />;
       default: return <Globe2 className="w-5 h-5 flex-shrink-0" />;
     }

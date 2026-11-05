@@ -15,6 +15,9 @@ import { EmergencyCommandCenter } from '../emergency/EmergencyCommandCenter';
 import { AgentInspectorModal } from '../emergency/AgentInspectorModal';
 import { EmergencyScenarioBuilder } from '../emergency/EmergencyScenarioBuilder';
 import { GisValidationModal } from '../panels/GisValidationModal';
+import { EventOperationsCommandCenter } from '../operations/EventOperationsCommandCenter';
+import { ResourceInspectorModal } from '../operations/ResourceInspectorModal';
+import { EventResource } from '../../types/operations';
 import { 
   LayerVisibilityState, 
   BaseImageryProvider, 
@@ -59,6 +62,10 @@ export const DashboardLayout: React.FC = () => {
   const [isEmergencyScenarioBuilderOpen, setIsEmergencyScenarioBuilderOpen] = useState<boolean>(false);
   const [isGisValidationOpen, setIsGisValidationOpen] = useState<boolean>(false);
 
+  // Day 4 Event Operations Command Center & Resource States
+  const [isOperationsCommandCenterOpen, setIsOperationsCommandCenterOpen] = useState<boolean>(false);
+  const [selectedResourceForInspection, setSelectedResourceForInspection] = useState<EventResource | null>(null);
+
   // Selected GIS Location (Pushkar Ghat selected by default for Day 1 discovery)
   const [selectedLocation, setSelectedLocation] = useState<GhatLocation | null>(GHAT_LOCATIONS[0]);
 
@@ -78,6 +85,9 @@ export const DashboardLayout: React.FC = () => {
     osmBuildingFootprints: true,
     custom3DModels: true,
     riverWaterSurface: true,
+    eventResources: true,
+    operationalZones: true,
+    dispatchRoutes: true,
   });
 
   // Terrain Status
@@ -101,13 +111,16 @@ export const DashboardLayout: React.FC = () => {
     resetClock,
   } = useSimulationTime();
 
-  // Subscribe to live crowd and traffic engine metric streams
+  // Subscribe to live crowd and traffic engine metric streams and Cesium interaction callbacks
   useEffect(() => {
     crowdEngine.setOnMetricsUpdate((metrics) => {
       setCrowdMetrics(metrics);
     });
     trafficEngine.setOnMetricsUpdate((metrics) => {
       setTrafficMetrics(metrics);
+    });
+    cesiumService.setOnResourceSelect((resource) => {
+      setSelectedResourceForInspection(resource);
     });
   }, []);
 
@@ -135,6 +148,11 @@ export const DashboardLayout: React.FC = () => {
     if (module.id === 'evacuation_sim') {
       setIsEmergencyPanelOpen(true);
       setLayers(prev => ({ ...prev, emergencyZones: true }));
+      return;
+    }
+    if (module.id === 'event_ops') {
+      setIsOperationsCommandCenterOpen(true);
+      setLayers(prev => ({ ...prev, eventResources: true, operationalZones: true }));
       return;
     }
 
@@ -232,6 +250,8 @@ export const DashboardLayout: React.FC = () => {
         onToggleScenarioModal={() => setIsEmergencyScenarioBuilderOpen(true)}
         onToggleEmergencyCommandCenter={() => setIsEmergencyPanelOpen(prev => !prev)}
         isEmergencyCommandCenterOpen={isEmergencyPanelOpen}
+        onToggleOperationsCommandCenter={() => setIsOperationsCommandCenterOpen(prev => !prev)}
+        isOperationsCommandCenterOpen={isOperationsCommandCenterOpen}
         onToggleAgentInspector={() => setIsAgentInspectorOpen(prev => !prev)}
         isAgentInspectorOpen={isAgentInspectorOpen}
         onToggleGisValidation={() => setIsGisValidationOpen(prev => !prev)}
@@ -341,6 +361,23 @@ export const DashboardLayout: React.FC = () => {
           <EmergencyScenarioBuilder
             isOpen={isEmergencyScenarioBuilderOpen}
             onClose={() => setIsEmergencyScenarioBuilderOpen(false)}
+          />
+
+          {/* Day 4 Intelligent Event Operations Command Center */}
+          <EventOperationsCommandCenter
+            isOpen={isOperationsCommandCenterOpen}
+            onClose={() => setIsOperationsCommandCenterOpen(false)}
+            onInspectResource={(res) => setSelectedResourceForInspection(res)}
+            onFlyToZone={(zoneId) => cesiumService.flyToZone(zoneId)}
+            onFlyToResource={(resourceId) => cesiumService.flyToResource(resourceId)}
+          />
+
+          {/* Day 4 Field Resource Detail Inspector */}
+          <ResourceInspectorModal
+            resource={selectedResourceForInspection}
+            isOpen={!!selectedResourceForInspection}
+            onClose={() => setSelectedResourceForInspection(null)}
+            onFlyToResource={(resourceId) => cesiumService.flyToResource(resourceId)}
           />
 
           {/* 5. Bottom Floating Simulation Control Panel */}

@@ -36,6 +36,8 @@ interface TopHeaderProps {
   onToggleScenarioModal?: () => void;
   onToggleEmergencyCommandCenter?: () => void;
   isEmergencyCommandCenterOpen?: boolean;
+  onToggleOperationsCommandCenter?: () => void;
+  isOperationsCommandCenterOpen?: boolean;
   onToggleAgentInspector?: () => void;
   isAgentInspectorOpen?: boolean;
   onToggleGisValidation?: () => void;
@@ -58,6 +60,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onToggleScenarioModal,
   onToggleEmergencyCommandCenter,
   isEmergencyCommandCenterOpen,
+  onToggleOperationsCommandCenter,
+  isOperationsCommandCenterOpen,
   onToggleAgentInspector,
   isAgentInspectorOpen,
   onToggleGisValidation,
@@ -213,6 +217,21 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5">
+          {onToggleOperationsCommandCenter && (
+            <button
+              onClick={onToggleOperationsCommandCenter}
+              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
+                isOperationsCommandCenterOpen 
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/60 shadow-glow-sm' 
+                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-cyan-400 hover:border-cyan-500/40'
+              }`}
+              title="Toggle Day 4 Event Operations Command Center"
+            >
+              <Radio className="w-4 h-4 text-cyan-400" />
+              <span className="hidden lg:inline font-mono font-semibold">Operations</span>
+            </button>
+          )}
+
           {onToggleEmergencyCommandCenter && (
             <button
               onClick={onToggleEmergencyCommandCenter}

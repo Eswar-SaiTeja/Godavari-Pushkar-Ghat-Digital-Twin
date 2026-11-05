@@ -155,6 +155,9 @@ export interface LayerVisibilityState {
   osmBuildingFootprints: boolean;
   custom3DModels: boolean;
   riverWaterSurface: boolean;
+  eventResources: boolean;
+  operationalZones: boolean;
+  dispatchRoutes: boolean;
 }
 
 export interface GisValidationMetrics {

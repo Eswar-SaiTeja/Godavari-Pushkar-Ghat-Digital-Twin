@@ -15,6 +15,8 @@ import {
   TerrainStatusInfo
 } from '../types/gis';
 import { SimulationMode } from '../types/simulation';
+import { eventOperationsEngine } from './eventOperationsEngine';
+import { EventResource, OperationalZone, DispatchAssignment } from '../types/operations';
 
 // Initialize Cesium Ion token if available
 const ionToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
@@ -35,6 +37,11 @@ export class CesiumService {
   private buildingEntities: Cesium.Entity[] = [];
   private customModelEntities: Map<string, Cesium.Entity> = new Map();
   private riverWaterEntities: Cesium.Entity[] = [];
+  private resourceEntities: Map<string, Cesium.Entity> = new Map();
+  private zoneEntities: Map<string, Cesium.Entity> = new Map();
+  private dispatchRouteEntities: Map<string, Cesium.Entity> = new Map();
+  private onResourceSelectCallback?: (resource: EventResource) => void;
+  private onZoneSelectCallback?: (zone: OperationalZone) => void;
   private tourInterval: any = null;
   private isMeasuring: boolean = false;
   private measurePoints: Cesium.Cartesian3[] = [];
@@ -134,6 +141,8 @@ export class CesiumService {
     this.createDemElevationGrid();
     this.createWaterFlowVectors();
     this.createCrowdDensityOverlay();
+    this.createOperationalZoneLayers();
+    this.createResourceLayers();
 
     log('8. Setting up interaction handlers...');
     this.setupInteractionHandlers(onLocationSelect);
@@ -915,6 +924,264 @@ export class CesiumService {
   }
 
   /**
+   * Create Operational Zone polygons with 3D capacity & population labels
+   */
+  public createOperationalZoneLayers(): void {
+    if (!this.viewer) return;
+    this.zoneEntities.forEach(e => this.viewer!.entities.remove(e));
+    this.zoneEntities.clear();
+
+    const zones = eventOperationsEngine.getZones();
+    zones.forEach((zone) => {
+      const flatCoords: number[] = [];
+      zone.polygon.forEach(([lon, lat]) => {
+        flatCoords.push(lon, lat);
+      });
+
+      const zonePolygon = this.viewer!.entities.add({
+        id: `zone-entity-${zone.id}`,
+        name: zone.name,
+        polygon: {
+          hierarchy: Cesium.Cartesian3.fromDegreesArray(flatCoords),
+          material: Cesium.Color.fromCssColorString(zone.color).withAlpha(0.14),
+          outline: true,
+          outlineColor: Cesium.Color.fromCssColorString(zone.color).withAlpha(0.85),
+          outlineWidth: 2.5,
+          height: 14,
+        },
+        properties: {
+          zoneData: zone,
+        }
+      });
+
+      // 3D Central status label
+      const labelEntity = this.viewer!.entities.add({
+        id: `zone-label-${zone.id}`,
+        position: Cesium.Cartesian3.fromDegrees(zone.center.longitude, zone.center.latitude, 32),
+        label: {
+          text: `[ZONE] ${zone.name}\nPop: ${zone.currentSimulatedPopulation.toLocaleString()} / ${zone.capacityAssumption.toLocaleString()} • [${zone.densityClassification}]`,
+          font: 'bold 11px Inter, sans-serif',
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          fillColor: Cesium.Color.fromCssColorString(zone.color),
+          outlineColor: Cesium.Color.fromCssColorString('#050811'),
+          outlineWidth: 4,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(80, 8000),
+          backgroundColor: Cesium.Color.fromCssColorString('#0a0f1d').withAlpha(0.85),
+          showBackground: true,
+          backgroundPadding: new Cesium.Cartesian2(8, 4),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        properties: {
+          zoneData: zone,
+        }
+      });
+
+      this.zoneEntities.set(zone.id, zonePolygon);
+      this.zoneEntities.set(`label-${zone.id}`, labelEntity);
+    });
+  }
+
+  /**
+   * Create Event Operations Resource pins with category-specific badges
+   */
+  public createResourceLayers(): void {
+    if (!this.viewer) return;
+    this.resourceEntities.forEach(e => this.viewer!.entities.remove(e));
+    this.resourceEntities.clear();
+
+    const resources = eventOperationsEngine.getResources();
+    resources.forEach((res) => {
+      const { longitude, latitude } = res.coordinates;
+      const height = res.coordinates.height || 18;
+
+      let catColor = '#3b82f6';
+      let iconSymbol = 'POLICE';
+
+      switch (res.category) {
+        case 'POLICE':
+          catColor = '#3b82f6';
+          iconSymbol = 'POLICE';
+          break;
+        case 'MEDICAL':
+          catColor = '#ef4444';
+          iconSymbol = 'MED HOSPITAL';
+          break;
+        case 'FIRST_AID':
+          catColor = '#ec4899';
+          iconSymbol = 'FIRST AID';
+          break;
+        case 'AMBULANCE':
+          catColor = '#f97316';
+          iconSymbol = '108 AMBULANCE';
+          break;
+        case 'FIRE_RESCUE':
+          catColor = '#ea580c';
+          iconSymbol = 'FIRE & RESCUE';
+          break;
+        case 'VOLUNTEER':
+          catColor = '#10b981';
+          iconSymbol = 'VOLUNTEER';
+          break;
+        case 'WATER_STATION':
+          catColor = '#0284c7';
+          iconSymbol = 'DRINKING WATER';
+          break;
+        case 'PUBLIC_TOILET':
+          catColor = '#06b6d4';
+          iconSymbol = 'BIO-TOILET';
+          break;
+        case 'TEMPORARY_SHELTER':
+          catColor = '#8b5cf6';
+          iconSymbol = 'SHELTER';
+          break;
+        default:
+          catColor = '#e2e8f0';
+          iconSymbol = res.category;
+      }
+
+      const entity = this.viewer!.entities.add({
+        id: `res-entity-${res.id}`,
+        name: res.name,
+        position: Cesium.Cartesian3.fromDegrees(longitude, latitude, height),
+        point: {
+          pixelSize: 13,
+          color: Cesium.Color.fromCssColorString(catColor),
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        label: {
+          text: `[${iconSymbol} | ${res.status}]\n${res.name}`,
+          font: '10px JetBrains Mono, monospace',
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.fromCssColorString('#050811'),
+          outlineWidth: 3,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -16),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(20, 6000),
+          backgroundColor: Cesium.Color.fromCssColorString('#0a0f1d').withAlpha(0.85),
+          showBackground: true,
+          backgroundPadding: new Cesium.Cartesian2(6, 4),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        properties: {
+          resourceData: res,
+        }
+      });
+
+      this.resourceEntities.set(res.id, entity);
+    });
+  }
+
+  public refreshResourceLayers(): void {
+    this.createResourceLayers();
+  }
+
+  public refreshZoneLayers(): void {
+    this.createOperationalZoneLayers();
+  }
+
+  public renderDispatchRoute(dispatch: DispatchAssignment): void {
+    if (!this.viewer) return;
+
+    const existing = this.dispatchRouteEntities.get(dispatch.id);
+    if (existing) {
+      this.viewer.entities.remove(existing);
+      this.dispatchRouteEntities.delete(dispatch.id);
+    }
+
+    const res = eventOperationsEngine.getResourceById(dispatch.resourceId);
+    if (!res) return;
+
+    const start = [res.coordinates.longitude, res.coordinates.latitude, 20];
+    const end = [dispatch.incidentCoordinates[0], dispatch.incidentCoordinates[1], 20];
+
+    const routeEntity = this.viewer.entities.add({
+      id: `disp-route-${dispatch.id}`,
+      name: `Dispatch: ${dispatch.resourceName} -> ${dispatch.incidentTitle}`,
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+          start[0], start[1], start[2],
+          end[0], end[1], end[2],
+        ]),
+        width: 5,
+        material: new Cesium.PolylineDashMaterialProperty({
+          color: Cesium.Color.fromCssColorString('#f59e0b'),
+          dashLength: 16.0,
+        }),
+      }
+    });
+
+    this.dispatchRouteEntities.set(dispatch.id, routeEntity);
+  }
+
+  public clearDispatchRoute(dispatchId: string): void {
+    if (!this.viewer) return;
+    const entity = this.dispatchRouteEntities.get(dispatchId);
+    if (entity) {
+      this.viewer.entities.remove(entity);
+      this.dispatchRouteEntities.delete(dispatchId);
+    }
+  }
+
+  public flyToResource(resourceOrId: EventResource | string): void {
+    if (!this.viewer) return;
+    const resource = typeof resourceOrId === 'string' 
+      ? eventOperationsEngine.getResourceById(resourceOrId) 
+      : resourceOrId;
+    if (!resource) return;
+    this.viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(
+        resource.coordinates.longitude,
+        resource.coordinates.latitude,
+        280
+      ),
+      orientation: {
+        heading: Cesium.Math.toRadians(325),
+        pitch: Cesium.Math.toRadians(-35),
+        roll: 0,
+      },
+      duration: 1.8,
+    });
+  }
+
+  public flyToZone(zoneOrId: OperationalZone | string): void {
+    if (!this.viewer) return;
+    const zone = typeof zoneOrId === 'string'
+      ? eventOperationsEngine.getZoneById(zoneOrId)
+      : zoneOrId;
+    if (!zone) return;
+    this.viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(
+        zone.center.longitude,
+        zone.center.latitude,
+        650
+      ),
+      orientation: {
+        heading: Cesium.Math.toRadians(325),
+        pitch: Cesium.Math.toRadians(-40),
+        roll: 0,
+      },
+      duration: 2.0,
+    });
+  }
+
+  public flyToCoordinates(longitude: number, latitude: number, height: number = 300): void {
+    if (!this.viewer) return;
+    this.viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(longitude, latitude, height),
+      orientation: {
+        heading: Cesium.Math.toRadians(325),
+        pitch: Cesium.Math.toRadians(-35),
+        roll: 0,
+      },
+      duration: 1.8,
+    });
+  }
+
+  /**
    * Sets up screen space mouse click picking on GIS entities
    */
   private setupInteractionHandlers(onLocationSelect?: (location: GhatLocation | null) => void): void {
@@ -939,6 +1206,24 @@ export class CesiumService {
       if (Cesium.defined(pickedObject) && pickedObject.id) {
         const entity = pickedObject.id as Cesium.Entity;
         
+        // Check if entity has resourceData property
+        if (entity.properties && entity.properties.hasProperty('resourceData')) {
+          const resourceData = entity.properties.getValue(Cesium.JulianDate.now()).resourceData as EventResource;
+          if (this.onResourceSelectCallback) {
+            this.onResourceSelectCallback(resourceData);
+          }
+          return;
+        }
+
+        // Check if entity has zoneData property
+        if (entity.properties && entity.properties.hasProperty('zoneData')) {
+          const zoneData = entity.properties.getValue(Cesium.JulianDate.now()).zoneData as OperationalZone;
+          if (this.onZoneSelectCallback) {
+            this.onZoneSelectCallback(zoneData);
+          }
+          return;
+        }
+
         // Check if entity has locationData property
         if (entity.properties && entity.properties.hasProperty('locationData')) {
           const locationData = entity.properties.getValue(Cesium.JulianDate.now()).locationData as GhatLocation;
@@ -956,6 +1241,14 @@ export class CesiumService {
         }
       }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  }
+
+  public setOnResourceSelect(cb?: (resource: EventResource) => void): void {
+    this.onResourceSelectCallback = cb;
+  }
+
+  public setOnZoneSelect(cb?: (zone: OperationalZone) => void): void {
+    this.onZoneSelectCallback = cb;
   }
 
   /**
@@ -1017,6 +1310,21 @@ export class CesiumService {
     // River Water Surface
     this.riverWaterEntities.forEach(e => {
       e.show = layers.riverWaterSurface;
+    });
+
+    // Event Operations Resources
+    this.resourceEntities.forEach(e => {
+      e.show = layers.eventResources !== false;
+    });
+
+    // Operational Zones
+    this.zoneEntities.forEach(e => {
+      e.show = layers.operationalZones !== false;
+    });
+
+    // Dispatch Routes
+    this.dispatchRouteEntities.forEach(e => {
+      e.show = layers.dispatchRoutes !== false;
     });
   }
 
@@ -1502,6 +1810,11 @@ export class CesiumService {
     this.buildingEntities = [];
     this.customModelEntities.clear();
     this.riverWaterEntities = [];
+    this.resourceEntities.clear();
+    this.zoneEntities.clear();
+    this.dispatchRouteEntities.clear();
+    this.onResourceSelectCallback = undefined;
+    this.onZoneSelectCallback = undefined;
   }
 }
 

@@ -16,7 +16,10 @@ import {
   Box,
   Database,
   FileCheck,
-  AlertTriangle
+  AlertTriangle,
+  Radio,
+  Activity,
+  Compass
 } from 'lucide-react';
 import { LayerVisibilityState, BaseImageryProvider } from '../../types/gis';
 import { cesiumService } from '../../services/cesiumService';
@@ -106,6 +109,9 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
 
   // 3. GIS VECTOR OVERLAYS
   const gisVectorItems: { key: keyof LayerVisibilityState; label: string; icon: React.ReactNode; color: string }[] = [
+    { key: 'operationalZones', label: 'Operational Ghat Zones (7 Sectors)', icon: <Compass className="w-4 h-4" />, color: 'text-indigo-400' },
+    { key: 'eventResources', label: 'Field Resources (Police, Medical, Fire)', icon: <Radio className="w-4 h-4" />, color: 'text-orange-400' },
+    { key: 'dispatchRoutes', label: 'Active Dispatch Corridors (Simulated)', icon: <Activity className="w-4 h-4" />, color: 'text-emerald-400' },
     { key: 'riverWaterSurface', label: 'Godavari River Water Body', icon: <Droplets className="w-4 h-4" />, color: 'text-sky-400' },
     { key: 'ghats', label: 'Bathing Ghats & Landmarks [VERIFIED]', icon: <Sparkles className="w-4 h-4" />, color: 'text-cyan-300' },
     { key: 'bridges', label: 'Godavari Historic Bridges [VERIFIED]', icon: <Layers className="w-4 h-4" />, color: 'text-blue-400' },

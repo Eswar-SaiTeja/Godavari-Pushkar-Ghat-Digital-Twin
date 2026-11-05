@@ -109,6 +109,24 @@ export const SIDEBAR_MODULES: ModuleDefinition[] = [
     }
   },
   {
+    id: 'event_ops',
+    label: 'Event Operations & Command',
+    shortDesc: 'Multi-agency resource deployment, ghat sector capacity, and 108 medical response',
+    iconName: 'Radio',
+    status: 'ACTIVE_DAY1',
+    badgeLabel: 'DAY 4',
+    details: {
+      overview: 'Comprehensive Event Operations Command Center for Godavari Pushkaram. Manages police, SDRF, medical camps, 108 ambulances, public facilities, and automated dispatch routing across 7 operational ghat sectors.',
+      plannedPhase: 'Day 4 Active: Intelligent Event Operations & Resource Management',
+      keyMetrics: [
+        { label: 'Operational Zones', value: '7', unit: 'sectors' },
+        { label: 'Field Resources', value: '22', unit: 'units' },
+        { label: 'Public Facilities', value: '18', unit: 'amenities' },
+        { label: 'Dispatch Workflow', value: '6-Stage', unit: 'protocol' },
+      ]
+    }
+  },
+  {
     id: 'boat_movement',
     label: 'Boat Movement & River Patrol',
     shortDesc: 'SDRF patrol craft, pilgrim ferry tracks, and deep-water boundary',

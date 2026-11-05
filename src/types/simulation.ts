@@ -12,6 +12,7 @@ export type SidebarModuleId =
   | 'traffic_sim' 
   | 'flood_sim' 
   | 'evacuation_sim' 
+  | 'event_ops'
   | 'boat_movement' 
   | 'live_monitoring' 
   | 'data_management' 
