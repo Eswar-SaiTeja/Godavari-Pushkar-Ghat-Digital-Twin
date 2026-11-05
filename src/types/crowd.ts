@@ -1,9 +1,16 @@
 export type AgeGroup = 'CHILDREN' | 'YOUNG' | 'ADULTS' | 'SENIORS';
 
 export type BehaviorState = 
+  | 'NORMAL_WALKING'
+  | 'ALERT_RECEIVED'
+  | 'REACTING'
+  | 'EVACUATING'
+  | 'WAITING'
+  | 'REROUTING'
+  | 'NEEDS_ASSISTANCE'
+  | 'EVACUATED'
   | 'WALKING'
   | 'RUNNING'
-  | 'WAITING'
   | 'RESTING'
   | 'TURNING'
   | 'AVOIDING_OBSTACLE'

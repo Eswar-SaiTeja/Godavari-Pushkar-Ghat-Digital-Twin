@@ -11,6 +11,9 @@ import { SimulationHUD } from '../simulation/SimulationHUD';
 import { CrowdControlsPanel } from '../simulation/CrowdControlsPanel';
 import { TrafficControlsPanel } from '../simulation/TrafficControlsPanel';
 import { ScenarioComparisonModal } from '../simulation/ScenarioComparisonModal';
+import { EmergencyCommandCenter } from '../emergency/EmergencyCommandCenter';
+import { AgentInspectorModal } from '../emergency/AgentInspectorModal';
+import { EmergencyScenarioBuilder } from '../emergency/EmergencyScenarioBuilder';
 import { 
   LayerVisibilityState, 
   BaseImageryProvider, 
@@ -48,6 +51,11 @@ export const DashboardLayout: React.FC = () => {
   const [isEmergencyAlert, setIsEmergencyAlert] = useState<boolean>(false);
   const [crowdMetrics, setCrowdMetrics] = useState<CrowdMetrics | null>(null);
   const [trafficMetrics, setTrafficMetrics] = useState<TrafficMetrics | null>(null);
+
+  // Day 3 Emergency Command Center & Scenario Builder States
+  const [isEmergencyPanelOpen, setIsEmergencyPanelOpen] = useState<boolean>(false);
+  const [isAgentInspectorOpen, setIsAgentInspectorOpen] = useState<boolean>(false);
+  const [isEmergencyScenarioBuilderOpen, setIsEmergencyScenarioBuilderOpen] = useState<boolean>(false);
 
   // Selected GIS Location (Pushkar Ghat selected by default for Day 1 discovery)
   const [selectedLocation, setSelectedLocation] = useState<GhatLocation | null>(GHAT_LOCATIONS[0]);
@@ -119,7 +127,7 @@ export const DashboardLayout: React.FC = () => {
       return;
     }
     if (module.id === 'evacuation_sim') {
-      setIsScenarioModalOpen(true);
+      setIsEmergencyPanelOpen(true);
       setLayers(prev => ({ ...prev, emergencyZones: true }));
       return;
     }
@@ -150,7 +158,7 @@ export const DashboardLayout: React.FC = () => {
       setLayers(prev => ({ ...prev, waterFlowVectors: true, demElevationGrid: true }));
     } else if (mode === 'EMERGENCY_EVAC') {
       setLayers(prev => ({ ...prev, emergencyZones: true }));
-      setIsScenarioModalOpen(true);
+      setIsEmergencyPanelOpen(true);
     }
   };
 
@@ -215,7 +223,11 @@ export const DashboardLayout: React.FC = () => {
         isCrowdPanelOpen={isCrowdPanelOpen}
         onToggleTrafficPanel={() => setIsTrafficPanelOpen(prev => !prev)}
         isTrafficPanelOpen={isTrafficPanelOpen}
-        onToggleScenarioModal={() => setIsScenarioModalOpen(true)}
+        onToggleScenarioModal={() => setIsEmergencyScenarioBuilderOpen(true)}
+        onToggleEmergencyCommandCenter={() => setIsEmergencyPanelOpen(prev => !prev)}
+        isEmergencyCommandCenterOpen={isEmergencyPanelOpen}
+        onToggleAgentInspector={() => setIsAgentInspectorOpen(prev => !prev)}
+        isAgentInspectorOpen={isAgentInspectorOpen}
       />
 
       {/* Main Body: Sidebar + Cesium Map Viewport */}
@@ -300,6 +312,26 @@ export const DashboardLayout: React.FC = () => {
           <ScenarioComparisonModal
             isOpen={isScenarioModalOpen}
             onClose={() => setIsScenarioModalOpen(false)}
+          />
+
+          {/* Day 3 Intelligent Emergency Command Center */}
+          <EmergencyCommandCenter
+            isOpen={isEmergencyPanelOpen}
+            onClose={() => setIsEmergencyPanelOpen(false)}
+            onOpenAgentInspector={() => setIsAgentInspectorOpen(true)}
+            onOpenScenarioBuilder={() => setIsEmergencyScenarioBuilderOpen(true)}
+          />
+
+          {/* Day 3 Selected Agent Inspector */}
+          <AgentInspectorModal
+            isOpen={isAgentInspectorOpen}
+            onClose={() => setIsAgentInspectorOpen(false)}
+          />
+
+          {/* Day 3 Multi-Scenario Builder & Comparative Analytics */}
+          <EmergencyScenarioBuilder
+            isOpen={isEmergencyScenarioBuilderOpen}
+            onClose={() => setIsEmergencyScenarioBuilderOpen(false)}
           />
 
           {/* 5. Bottom Floating Simulation Control Panel */}

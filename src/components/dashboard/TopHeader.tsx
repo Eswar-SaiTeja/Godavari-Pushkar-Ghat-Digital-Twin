@@ -12,7 +12,9 @@ import {
   Radio,
   Users,
   Car,
-  BarChart3
+  BarChart3,
+  ShieldAlert,
+  User
 } from 'lucide-react';
 import { Badge } from '../common/Badge';
 import { SimulationMode } from '../../types/simulation';
@@ -31,6 +33,10 @@ interface TopHeaderProps {
   onToggleTrafficPanel?: () => void;
   isTrafficPanelOpen?: boolean;
   onToggleScenarioModal?: () => void;
+  onToggleEmergencyCommandCenter?: () => void;
+  isEmergencyCommandCenterOpen?: boolean;
+  onToggleAgentInspector?: () => void;
+  isAgentInspectorOpen?: boolean;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -47,6 +53,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onToggleTrafficPanel,
   isTrafficPanelOpen,
   onToggleScenarioModal,
+  onToggleEmergencyCommandCenter,
+  isEmergencyCommandCenterOpen,
+  onToggleAgentInspector,
+  isAgentInspectorOpen,
 }) => {
   const [isFullscreen, setIsFullscreen] = React.useState<boolean>(false);
 
@@ -198,6 +208,36 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5">
+          {onToggleEmergencyCommandCenter && (
+            <button
+              onClick={onToggleEmergencyCommandCenter}
+              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
+                isEmergencyCommandCenterOpen 
+                  ? 'bg-rose-500/20 text-rose-300 border-rose-400/60 shadow-glow-sm animate-pulse' 
+                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-rose-400 hover:border-rose-500/40'
+              }`}
+              title="Toggle Intelligent Emergency Command Center"
+            >
+              <ShieldAlert className="w-4 h-4 text-rose-400" />
+              <span className="hidden lg:inline font-mono font-semibold">Evacuation</span>
+            </button>
+          )}
+
+          {onToggleAgentInspector && (
+            <button
+              onClick={onToggleAgentInspector}
+              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
+                isAgentInspectorOpen 
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/60 shadow-glow-sm' 
+                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-cyan-400 hover:border-cyan-500/40'
+              }`}
+              title="Inspect Individual Pedestrian Agents"
+            >
+              <User className="w-4 h-4 text-cyan-400" />
+              <span className="hidden lg:inline font-mono font-semibold">Agent</span>
+            </button>
+          )}
+
           {onToggleCrowdPanel && (
             <button
               onClick={onToggleCrowdPanel}

@@ -135,6 +135,8 @@ export class CrowdSimulationEngine {
   private animationFrameId: number | null = null;
   private lastFrameTime: number = performance.now();
   private viewer: Cesium.Viewer | null = null;
+  private selectedAgentId: string | null = null;
+  private selectedAgentReticle: Cesium.Entity | null = null;
 
   constructor() {
     this.graph = createPushkarGhatPedestrianGraph();
@@ -251,6 +253,7 @@ export class CrowdSimulationEngine {
       agent.assignedExitId = exitGate.id;
       agent.elapsedSinceAlert = 0;
       agent.hasRespondedToAlert = false;
+      agent.behaviorState = 'ALERT_RECEIVED';
     });
   }
 
@@ -258,10 +261,40 @@ export class CrowdSimulationEngine {
     this.isEmergencyAlertActive = false;
     this.alertStartTime = null;
     this.agents.forEach(agent => {
-      agent.behaviorState = 'WALKING';
+      agent.behaviorState = 'NORMAL_WALKING';
       agent.hasRespondedToAlert = false;
       agent.targetSpeed = this.ageProfiles[agent.ageGroup].baseSpeed;
     });
+  }
+
+  public selectAgent(agentId: string | null): void {
+    this.selectedAgentId = agentId;
+    this.updateSelectedAgentReticle();
+  }
+
+  public getSelectedAgent(): PedestrianAgent | null {
+    if (!this.selectedAgentId) return null;
+    return this.agents.find(a => a.id === this.selectedAgentId) || null;
+  }
+
+  public getAllAgents(): PedestrianAgent[] {
+    return this.agents;
+  }
+
+  public pickAgentNearCoordinates(lon: number, lat: number, maxDistMeters: number = 25): PedestrianAgent | null {
+    const degDist = maxDistMeters / 111000;
+    let closest: PedestrianAgent | null = null;
+    let minDist = degDist;
+
+    for (const a of this.agents) {
+      if (a.isEvacuated) continue;
+      const d = Math.hypot(a.position.longitude - lon, a.position.latitude - lat);
+      if (d < minDist) {
+        minDist = d;
+        closest = a;
+      }
+    }
+    return closest;
   }
 
   public setOnMetricsUpdate(cb: (metrics: CrowdMetrics) => void): void {
@@ -325,7 +358,7 @@ export class CrowdSimulationEngine {
         },
         speed: profile.baseSpeed * (0.9 + pseudoRandom() * 0.2),
         targetSpeed: profile.baseSpeed,
-        behaviorState: 'WALKING',
+        behaviorState: 'NORMAL_WALKING',
         groupId: ageGroup === 'CHILDREN' ? `family_${Math.floor(i / 3)}` : null,
         reactionDelaySeconds: Number(reactionDelay.toFixed(2)),
         elapsedSinceAlert: 0,
@@ -373,26 +406,34 @@ export class CrowdSimulationEngine {
       // Handle Emergency Reaction Time Logic
       if (isEmergency) {
         agent.elapsedSinceAlert += dt;
-        if (!agent.hasRespondedToAlert && agent.elapsedSinceAlert >= agent.reactionDelaySeconds) {
-          agent.hasRespondedToAlert = true;
-          agent.behaviorState = agent.requiresAssistance ? 'REQUESTING_ASSISTANCE' : 'RESPONDING_TO_EMERGENCY';
-          
-          // Recompute path to assigned evacuation gate
-          if (agent.assignedExitId) {
-            const startNodeId = this.findClosestNode(agent.position.longitude, agent.position.latitude);
-            const exitGate = this.gates.find(g => g.id === agent.assignedExitId);
-            if (exitGate) {
-              const exitNodeId = this.findClosestNode(exitGate.coordinates.longitude, exitGate.coordinates.latitude);
-              agent.currentPath = this.graph.findPath(startNodeId, exitNodeId);
-              agent.pathIndex = 0;
+        if (!agent.hasRespondedToAlert) {
+          if (agent.elapsedSinceAlert < agent.reactionDelaySeconds * 0.4) {
+            agent.behaviorState = 'ALERT_RECEIVED';
+          } else if (agent.elapsedSinceAlert < agent.reactionDelaySeconds) {
+            agent.behaviorState = 'REACTING';
+          } else {
+            agent.hasRespondedToAlert = true;
+            agent.behaviorState = agent.requiresAssistance ? 'NEEDS_ASSISTANCE' : 'EVACUATING';
+            
+            // Recompute path to assigned evacuation gate
+            if (agent.assignedExitId) {
+              const startNodeId = this.findClosestNode(agent.position.longitude, agent.position.latitude);
+              const exitGate = this.gates.find(g => g.id === agent.assignedExitId);
+              if (exitGate) {
+                const exitNodeId = this.findClosestNode(exitGate.coordinates.longitude, exitGate.coordinates.latitude);
+                agent.currentPath = this.graph.findPath(startNodeId, exitNodeId);
+                agent.pathIndex = 0;
+              }
             }
-          }
 
-          // Panic speed multiplier
-          agent.targetSpeed = agent.requiresAssistance 
-            ? this.ageProfiles[agent.ageGroup].baseSpeed * 0.7 
-            : this.ageProfiles[agent.ageGroup].baseSpeed * 1.6;
+            // Panic speed multiplier
+            agent.targetSpeed = agent.requiresAssistance 
+              ? this.ageProfiles[agent.ageGroup].baseSpeed * 0.7 
+              : this.ageProfiles[agent.ageGroup].baseSpeed * 1.5;
+          }
         }
+      } else {
+        agent.behaviorState = 'NORMAL_WALKING';
       }
 
       // Smooth acceleration
@@ -413,6 +454,7 @@ export class CrowdSimulationEngine {
             // Reached destination or evacuation exit
             if (isEmergency && agent.hasRespondedToAlert) {
               agent.isEvacuated = true;
+              agent.behaviorState = 'EVACUATED';
               agent.evacuationTimeSeconds = Number((agent.elapsedSinceAlert).toFixed(1));
               return;
             } else {
@@ -506,10 +548,84 @@ export class CrowdSimulationEngine {
         agent.position.height
       );
 
-      const colorCss = agent.behaviorState === 'REQUESTING_ASSISTANCE' 
-        ? '#ef4444' 
-        : this.ageProfiles[agent.ageGroup].color;
-      primitive.color = Cesium.Color.fromCssColorString(colorCss);
+      const isSelected = agent.id === this.selectedAgentId;
+      let colorCss = this.ageProfiles[agent.ageGroup].color;
+      if (agent.behaviorState === 'NEEDS_ASSISTANCE' || agent.behaviorState === 'REQUESTING_ASSISTANCE') {
+        colorCss = '#ef4444'; // Red
+      } else if (agent.behaviorState === 'REACTING' || agent.behaviorState === 'ALERT_RECEIVED') {
+        colorCss = '#f59e0b'; // Amber
+      } else if (agent.behaviorState === 'REROUTING') {
+        colorCss = '#ec4899'; // Pink
+      } else if (agent.behaviorState === 'WAITING') {
+        colorCss = '#eab308'; // Yellow
+      }
+
+      if (isSelected) {
+        primitive.color = Cesium.Color.fromCssColorString('#ffffff');
+        primitive.pixelSize = 14;
+        primitive.outlineColor = Cesium.Color.fromCssColorString('#06b6d4');
+        primitive.outlineWidth = 3;
+      } else {
+        primitive.color = Cesium.Color.fromCssColorString(colorCss);
+        primitive.pixelSize = agent.ageGroup === 'CHILDREN' ? 6 : agent.ageGroup === 'SENIORS' ? 9 : 8;
+        primitive.outlineColor = Cesium.Color.WHITE.withAlpha(0.6);
+        primitive.outlineWidth = 1;
+      }
+    }
+
+    if (this.selectedAgentId) {
+      this.updateSelectedAgentReticle();
+    }
+  }
+
+  private updateSelectedAgentReticle(): void {
+    if (!this.viewer) return;
+    const agent = this.getSelectedAgent();
+
+    if (!agent || agent.isEvacuated) {
+      if (this.selectedAgentReticle) {
+        this.viewer.entities.remove(this.selectedAgentReticle);
+        this.selectedAgentReticle = null;
+      }
+      return;
+    }
+
+    const pos = Cesium.Cartesian3.fromDegrees(agent.position.longitude, agent.position.latitude, agent.position.height + 2);
+
+    if (!this.selectedAgentReticle) {
+      this.selectedAgentReticle = this.viewer.entities.add({
+        id: 'selected_agent_reticle',
+        name: `Selected: ${agent.id}`,
+        position: pos,
+        point: {
+          pixelSize: 22,
+          color: Cesium.Color.fromCssColorString('#06b6d4').withAlpha(0.35),
+          outlineColor: Cesium.Color.fromCssColorString('#22d3ee'),
+          outlineWidth: 3,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        label: {
+          text: `🎯 AGENT ${agent.id.replace('ped_agent_', '#')}\n[${agent.ageGroup}] ${agent.behaviorState}`,
+          font: 'bold 11px JetBrains Mono, monospace',
+          fillColor: Cesium.Color.WHITE,
+          backgroundColor: Cesium.Color.fromCssColorString('#082f49').withAlpha(0.9),
+          showBackground: true,
+          backgroundPadding: new Cesium.Cartesian2(6, 4),
+          outlineColor: Cesium.Color.fromCssColorString('#06b6d4'),
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -22),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      });
+    } else {
+      this.selectedAgentReticle.position = new Cesium.ConstantPositionProperty(pos);
+      if (this.selectedAgentReticle.label) {
+        this.selectedAgentReticle.label.text = new Cesium.ConstantProperty(
+          `🎯 AGENT ${agent.id.replace('ped_agent_', '#')}\n[${agent.ageGroup}] ${agent.behaviorState}`
+        );
+      }
     }
   }
 
@@ -681,6 +797,10 @@ export class CrowdSimulationEngine {
     if (this.pointPrimitives && this.viewer) {
       this.viewer.scene.primitives.remove(this.pointPrimitives);
       this.pointPrimitives = null;
+    }
+    if (this.selectedAgentReticle && this.viewer) {
+      this.viewer.entities.remove(this.selectedAgentReticle);
+      this.selectedAgentReticle = null;
     }
     this.bottleneckEntities.forEach(e => this.viewer?.entities.remove(e));
     this.bottleneckEntities = [];

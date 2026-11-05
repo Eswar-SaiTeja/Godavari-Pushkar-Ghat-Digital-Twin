@@ -71,11 +71,11 @@ export const CrowdControlsPanel: React.FC<CrowdControlsPanelProps> = ({
       title="Crowd Simulation & Age Behaviour"
       subtitle="Pedestrian Dynamics • DEMO Mode"
       icon={<Users className="w-4 h-4 text-cyan-400" />}
-      defaultPosition={{ x: 20, y: 76 }}
-      defaultSize={{ width: 360, height: 'auto' }}
-      minWidth={300}
-      maxWidth={520}
-      maxHeight={740}
+      defaultPosition={{ x: 80, y: 76 }}
+      defaultSize={{ width: 380, height: 'auto' }}
+      minWidth={320}
+      maxWidth={540}
+      maxHeight={580}
       isOpen={isOpen}
       onClose={onClose}
       resizable={true}

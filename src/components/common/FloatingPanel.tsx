@@ -79,21 +79,23 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     initialHeight: 0,
   });
 
-  // Keep inside viewport on window resize
-  const clampPosition = useCallback((x: number, y: number, currentWidth: number, currentHeight: number) => {
-    const maxX = Math.max(0, window.innerWidth - currentWidth - 8);
-    const maxY = Math.max(64, window.innerHeight - (isMinimized ? 44 : currentHeight) - 8);
+  // Keep inside viewport on window resize and dragging
+  const clampPosition = useCallback((x: number, y: number, currentWidth: number) => {
+    // Allow dragging freely while keeping header accessible
+    const maxX = Math.max(0, window.innerWidth - Math.min(currentWidth, 80));
+    // Allow panel to be moved down or up, but keep header visible between top toolbar (64px) and bottom
+    const maxY = Math.max(64, window.innerHeight - 50);
     return {
-      x: Math.max(8, Math.min(maxX, x)),
+      x: Math.max(0, Math.min(maxX, x)),
       y: Math.max(64, Math.min(maxY, y)),
     };
-  }, [isMinimized]);
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
       if (!panelRef.current) return;
       const rect = panelRef.current.getBoundingClientRect();
-      setPosition(prev => clampPosition(prev.x, prev.y, rect.width, rect.height));
+      setPosition(prev => clampPosition(prev.x, prev.y, rect.width));
     };
 
     window.addEventListener('resize', handleResize);
@@ -129,9 +131,8 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
 
       const panelRect = panelRef.current?.getBoundingClientRect();
       const currentWidth = panelRect?.width || size.width;
-      const currentHeight = panelRect?.height || 350;
 
-      const clamped = clampPosition(rawX, rawY, currentWidth, currentHeight);
+      const clamped = clampPosition(rawX, rawY, currentWidth);
       setPosition(clamped);
     };
 
@@ -214,7 +215,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
         top: `${position.y}px`,
         width: `${size.width}px`,
         height: isMinimized ? 'auto' : (typeof size.height === 'number' ? `${size.height}px` : 'auto'),
-        maxHeight: isMinimized ? 'auto' : `${maxHeight}px`,
+        maxHeight: isMinimized ? 'auto' : `min(${maxHeight}px, calc(100vh - ${Math.max(64, position.y)}px - 56px))`,
       }}
       className={`fixed z-30 flex flex-col glass-panel rounded-xl border border-cyan-500/30 shadow-panel select-none overflow-hidden transition-shadow ${
         isDragging ? 'shadow-glow-cyan cursor-grabbing opacity-95' : 'shadow-2xl'
@@ -282,7 +283,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
 
       {/* Panel Body Content (hidden when minimized) */}
       {!isMinimized && (
-        <div className="relative flex-1 overflow-y-auto overflow-x-hidden p-3 custom-scrollbar flex flex-col">
+        <div className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 custom-scrollbar flex flex-col overscroll-contain">
           {children}
         </div>
       )}

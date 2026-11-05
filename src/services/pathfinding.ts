@@ -63,11 +63,32 @@ export class AStarGraph {
   }
 
   public setEdgeBlocked(fromId: string, toId: string, blocked: boolean): void {
-    const list = this.edges.get(fromId);
-    if (list) {
-      const e = list.find(x => x.toNodeId === toId);
-      if (e) e.isBlocked = blocked;
+    const list1 = this.edges.get(fromId);
+    if (list1) {
+      const e1 = list1.find(x => x.toNodeId === toId);
+      if (e1) e1.isBlocked = blocked;
     }
+    const list2 = this.edges.get(toId);
+    if (list2) {
+      const e2 = list2.find(x => x.toNodeId === fromId);
+      if (e2) e2.isBlocked = blocked;
+    }
+  }
+
+  public resetAllBlockages(): void {
+    for (const edgeList of this.edges.values()) {
+      for (const e of edgeList) {
+        e.isBlocked = false;
+        e.currentCongestionFactor = 1.0;
+      }
+    }
+  }
+
+  public isEdgeBlocked(fromId: string, toId: string): boolean {
+    const list = this.edges.get(fromId);
+    if (!list) return false;
+    const e = list.find(x => x.toNodeId === toId);
+    return e ? e.isBlocked : false;
   }
 
   public findPath(startNodeId: string, goalNodeId: string): [number, number][] {
