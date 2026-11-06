@@ -490,6 +490,17 @@ class EventOperationsEngine {
         [resource.coordinates.longitude, resource.coordinates.latitude],
         [incident.coordinates[0], incident.coordinates[1]],
       ],
+      auditHistory: [
+        {
+          id: `audit-${Date.now()}-1`,
+          fromStatus: 'ASSIGNED',
+          toStatus: 'DISPATCHED',
+          timestamp: new Date().toISOString(),
+          simulationTime: new Date().toLocaleTimeString('en-IN', { hour12: false }),
+          actor: 'Operations Commander',
+          notes: notes || `Direct dispatch to ${incident.title}`,
+        }
+      ],
       notes: notes || `Dispatched to ${incident.title} (${incident.severity} severity).`,
     };
 

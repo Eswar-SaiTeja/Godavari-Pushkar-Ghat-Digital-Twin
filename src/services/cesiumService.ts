@@ -17,9 +17,11 @@ import {
 import { SimulationMode } from '../types/simulation';
 import { eventOperationsEngine } from './eventOperationsEngine';
 import { EventResource, OperationalZone, DispatchAssignment } from '../types/operations';
+import { EmergencyIncident } from '../types/emergency';
+import { emergencyEngine } from './emergencyDetectionEngine';
 
 // Initialize Cesium Ion token if available
-const ionToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
+const ionToken = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_CESIUM_ION_TOKEN) || '';
 if (ionToken && ionToken.trim() !== '') {
   Cesium.Ion.defaultAccessToken = ionToken;
 }
@@ -42,6 +44,7 @@ export class CesiumService {
   private dispatchRouteEntities: Map<string, Cesium.Entity> = new Map();
   private onResourceSelectCallback?: (resource: EventResource) => void;
   private onZoneSelectCallback?: (zone: OperationalZone) => void;
+  private onIncidentSelectCallback?: (incident: EmergencyIncident) => void;
   private tourInterval: any = null;
   private isMeasuring: boolean = false;
   private measurePoints: Cesium.Cartesian3[] = [];
@@ -116,13 +119,15 @@ export class CesiumService {
     // Command-center deep navy slate base color so failed/loading tiles never display a pitch black abyss
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#0b1329');
 
-    // Buffer-free tile caching and zoom bounds
+    // Buffer-free tile caching and smooth zoom bounds
     viewer.scene.globe.maximumScreenSpaceError = 2;
-    viewer.scene.globe.tileCacheSize = 250;
+    viewer.scene.globe.tileCacheSize = 1000;
     viewer.scene.globe.preloadAncestors = true;
     viewer.scene.globe.preloadSiblings = true;
-    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 15.0;
-    viewer.scene.screenSpaceCameraController.maximumZoomDistance = 25000000.0;
+    viewer.scene.globe.loadingDescendantLimit = 20;
+    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 30.0;
+    viewer.scene.screenSpaceCameraController.maximumZoomDistance = 60000.0;
+    viewer.scene.screenSpaceCameraController.inertiaZoom = 0.5;
     viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
 
     log('5. Setting up terrain with fallback...');
@@ -131,18 +136,26 @@ export class CesiumService {
     log('6. Flying to initial position...');
     this.flyToInitialPosition(false);
 
-    log('7. Creating spatial layers...');
-    this.createRiverWaterSurface();
-    this.createBoundaryLayers();
-    this.createBridgeLayers();
-    this.createBuildings3D();
-    this.createGhatLocationMarkers();
-    this.createEmergencyEvacuationCorridor();
-    this.createDemElevationGrid();
-    this.createWaterFlowVectors();
-    this.createCrowdDensityOverlay();
-    this.createOperationalZoneLayers();
-    this.createResourceLayers();
+    log('7. Creating spatial layers safely...');
+    const safeInit = (name: string, fn: () => void) => {
+      try {
+        fn();
+      } catch (err) {
+        console.warn(`[CesiumService] Non-critical warning in ${name}:`, err);
+      }
+    };
+
+    safeInit('River Water Surface', () => this.createRiverWaterSurface());
+    safeInit('Boundary Layers', () => this.createBoundaryLayers());
+    safeInit('Bridge Layers', () => this.createBridgeLayers());
+    safeInit('Buildings 3D', () => this.createBuildings3D());
+    safeInit('Ghat Location Markers', () => this.createGhatLocationMarkers());
+    safeInit('Emergency Evacuation Corridor', () => this.createEmergencyEvacuationCorridor());
+    safeInit('DEM Elevation Grid', () => this.createDemElevationGrid());
+    safeInit('Water Flow Vectors', () => this.createWaterFlowVectors());
+    safeInit('Crowd Density Overlay', () => this.createCrowdDensityOverlay());
+    safeInit('Operational Zone Layers', () => this.createOperationalZoneLayers());
+    safeInit('Resource Layers', () => this.createResourceLayers());
 
     log('8. Setting up interaction handlers...');
     this.setupInteractionHandlers(onLocationSelect);
@@ -1095,22 +1108,31 @@ export class CesiumService {
     const res = eventOperationsEngine.getResourceById(dispatch.resourceId);
     if (!res) return;
 
-    const start = [res.coordinates.longitude, res.coordinates.latitude, 20];
-    const end = [dispatch.incidentCoordinates[0], dispatch.incidentCoordinates[1], 20];
+    let flatHeights: number[] = [];
+    if (dispatch.routeCoordinates && dispatch.routeCoordinates.length >= 2) {
+      dispatch.routeCoordinates.forEach(([lon, lat]) => {
+        flatHeights.push(lon, lat, 22);
+      });
+    } else {
+      const start = [res.coordinates.longitude, res.coordinates.latitude, 22];
+      const end = [dispatch.incidentCoordinates[0], dispatch.incidentCoordinates[1], 22];
+      flatHeights = [start[0], start[1], start[2], end[0], end[1], end[2]];
+    }
+
+    const isCritical = dispatch.incidentSeverity === 'CRITICAL';
+    const glowColor = isCritical ? '#ef4444' : '#f59e0b';
 
     const routeEntity = this.viewer.entities.add({
       id: `disp-route-${dispatch.id}`,
       name: `Dispatch: ${dispatch.resourceName} -> ${dispatch.incidentTitle}`,
       polyline: {
-        positions: Cesium.Cartesian3.fromDegreesArrayHeights([
-          start[0], start[1], start[2],
-          end[0], end[1], end[2],
-        ]),
-        width: 5,
-        material: new Cesium.PolylineDashMaterialProperty({
-          color: Cesium.Color.fromCssColorString('#f59e0b'),
-          dashLength: 16.0,
+        positions: Cesium.Cartesian3.fromDegreesArrayHeights(flatHeights),
+        width: 6,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.35,
+          color: Cesium.Color.fromCssColorString(glowColor),
         }),
+        clampToGround: false,
       }
     });
 
@@ -1124,6 +1146,28 @@ export class CesiumService {
       this.viewer.entities.remove(entity);
       this.dispatchRouteEntities.delete(dispatchId);
     }
+  }
+
+  public flyToIncident(incidentOrId: EmergencyIncident | string): void {
+    if (!this.viewer) return;
+    const incident = typeof incidentOrId === 'string'
+      ? emergencyEngine.getIncidents().find(i => i.id === incidentOrId)
+      : incidentOrId;
+    if (!incident) return;
+
+    this.viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(
+        incident.coordinates[0],
+        incident.coordinates[1],
+        260
+      ),
+      orientation: {
+        heading: Cesium.Math.toRadians(325),
+        pitch: Cesium.Math.toRadians(-35),
+        roll: 0,
+      },
+      duration: 1.8,
+    });
   }
 
   public flyToResource(resourceOrId: EventResource | string): void {
@@ -1206,6 +1250,15 @@ export class CesiumService {
       if (Cesium.defined(pickedObject) && pickedObject.id) {
         const entity = pickedObject.id as Cesium.Entity;
         
+        // Check if entity has incidentData property
+        if (entity.properties && entity.properties.hasProperty('incidentData')) {
+          const incidentData = entity.properties.getValue(Cesium.JulianDate.now()).incidentData as EmergencyIncident;
+          if (this.onIncidentSelectCallback) {
+            this.onIncidentSelectCallback(incidentData);
+          }
+          return;
+        }
+
         // Check if entity has resourceData property
         if (entity.properties && entity.properties.hasProperty('resourceData')) {
           const resourceData = entity.properties.getValue(Cesium.JulianDate.now()).resourceData as EventResource;
@@ -1249,6 +1302,10 @@ export class CesiumService {
 
   public setOnZoneSelect(cb?: (zone: OperationalZone) => void): void {
     this.onZoneSelectCallback = cb;
+  }
+
+  public setOnIncidentSelect(cb?: (incident: EmergencyIncident) => void): void {
+    this.onIncidentSelectCallback = cb;
   }
 
   /**
@@ -1815,6 +1872,7 @@ export class CesiumService {
     this.dispatchRouteEntities.clear();
     this.onResourceSelectCallback = undefined;
     this.onZoneSelectCallback = undefined;
+    this.onIncidentSelectCallback = undefined;
   }
 }
 

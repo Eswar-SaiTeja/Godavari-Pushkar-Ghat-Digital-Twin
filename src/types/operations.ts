@@ -1,4 +1,5 @@
 import { IncidentSeverity, IncidentType } from './emergency';
+export type { IncidentSeverity, IncidentType };
 
 export type ResourceCategory = 
   | 'POLICE'
@@ -31,13 +32,48 @@ export type DispatchStatus =
   | 'ASSIGNED' 
   | 'DISPATCHED' 
   | 'ON_SCENE' 
-  | 'RESOLVED';
+  | 'RESOLVED'
+  | 'CANCELLED';
 
 export type FacilityAvailability = 
   | 'OPERATIONAL' 
   | 'LIMITED' 
   | 'MAINTENANCE' 
   | 'CLOSED';
+
+export interface DispatchTransitionAudit {
+  id: string;
+  fromStatus: DispatchStatus;
+  toStatus: DispatchStatus;
+  timestamp: string;
+  simulationTime: string;
+  actor: string;
+  notes?: string;
+}
+
+export interface RecommendationWeights {
+  distanceWeight: number; // e.g. 0.35
+  categoryMatchWeight: number; // e.g. 0.35
+  workloadWeight: number; // e.g. 0.15
+  readinessWeight: number; // e.g. 0.15
+  requireAdminConfirmation: boolean;
+  allowEmergencyOverride: boolean;
+}
+
+export interface RecommendationScore {
+  resource: EventResource;
+  totalScore: number;
+  distanceScore: number;
+  categoryScore: number;
+  workloadScore: number;
+  readinessScore: number;
+  distanceMeters: number;
+  estimatedArrivalMinutes: number;
+  isRecommended: boolean;
+  selectionReason: string;
+  routeCoordinates: [number, number][];
+  isStraightLineFallback: boolean;
+}
 
 export interface EventResource {
   id: string;
@@ -101,6 +137,44 @@ export interface DispatchAssignment {
   estimatedArrivalMinutes: number;
   routeCoordinates?: [number, number][];
   notes: string;
+  auditHistory: DispatchTransitionAudit[];
+  selectionReason?: string;
+  isStraightLineFallback?: boolean;
+  scoringBreakdown?: {
+    totalScore: number;
+    distanceScore: number;
+    categoryScore: number;
+    workloadScore: number;
+    readinessScore: number;
+  };
+}
+
+export type OperationalReportType = 
+  | 'DISPATCH_PERFORMANCE' 
+  | 'INCIDENT_SUMMARY' 
+  | 'RESOURCE_UTILIZATION' 
+  | 'ZONE_OPERATIONS';
+
+export interface OperationsAnalyticsData {
+  totalIncidents: number;
+  activeIncidents: number;
+  resolvedIncidents: number;
+  cancelledDispatches: number;
+  pendingDispatches: number;
+  totalResources: number;
+  availableResources: number;
+  deployedResources: number;
+  resourceUtilizationPct: number;
+  avgAcknowledgementDurationSec: number;
+  avgAssignmentDurationSec: number;
+  avgDispatchProcessingDurationSec: number;
+  avgSimulatedTravelDurationMin: number;
+  avgTotalResolutionDurationMin: number;
+  severityDistribution: Record<IncidentSeverity, number>;
+  categoryDistribution: Record<string, number>;
+  zoneDistribution: Record<string, number>;
+  resourceCategoryBreakdown: Record<string, { total: number; deployed: number; available: number; utilizationPct: number }>;
+  timelinePoints: Array<{ time: string; incidents: number; dispatches: number }>;
 }
 
 export interface OperationsLogEvent {

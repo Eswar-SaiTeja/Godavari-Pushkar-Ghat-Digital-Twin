@@ -23,7 +23,6 @@ import {
   Sliders, 
   Send, 
   TrendingUp, 
-  ArrowRight,
   Building2,
   Trash2,
   Check
@@ -42,6 +41,9 @@ import { eventOperationsEngine } from '../../services/eventOperationsEngine';
 import { cesiumService } from '../../services/cesiumService';
 import { emergencyEngine } from '../../services/emergencyDetectionEngine';
 import { EmergencyIncident } from '../../types/emergency';
+import { dispatchEngine } from '../../services/dispatchEngine';
+import { DispatchManagementConsole } from './DispatchManagementConsole';
+import { OperationsAnalyticsDashboard } from './OperationsAnalyticsDashboard';
 
 interface EventOperationsCommandCenterProps {
   isOpen: boolean;
@@ -69,7 +71,16 @@ export const EventOperationsCommandCenter: React.FC<EventOperationsCommandCenter
   onFlyToZone,
   onFlyToResource,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const ops = params.get('ops');
+      if (ops && ['overview', 'resources', 'zones', 'dispatch', 'medical', 'facilities', 'analytics', 'logs', 'admin'].includes(ops)) {
+        return ops as TabType;
+      }
+    }
+    return 'overview';
+  });
   const [metrics, setMetrics] = useState<OperationsCommandMetrics>(eventOperationsEngine.getOperationsMetrics());
   const [resources, setResources] = useState<EventResource[]>(eventOperationsEngine.getResources());
   const [zones, setZones] = useState<OperationalZone[]>(eventOperationsEngine.getZones());
@@ -93,6 +104,7 @@ export const EventOperationsCommandCenter: React.FC<EventOperationsCommandCenter
 
   // Admin Config State
   const [zoneCapacities, setZoneCapacities] = useState<Record<string, number>>({});
+  const [dispatchWeights, setDispatchWeights] = useState(dispatchEngine.getWeights());
   const [adminSuccessMsg, setAdminSuccessMsg] = useState<string | null>(null);
 
   // Subscribe to live operations updates
@@ -234,24 +246,33 @@ export const EventOperationsCommandCenter: React.FC<EventOperationsCommandCenter
     }
   };
 
-  const handleAdvanceDispatch = (dispatchId: string) => {
-    const updated = eventOperationsEngine.advanceDispatchStatus(dispatchId);
-    if (updated) {
-      cesiumService.renderDispatchRoute(updated);
-    }
-  };
-
-  const handleResolveDispatch = (dispatchId: string) => {
-    eventOperationsEngine.resolveDispatch(dispatchId);
-    cesiumService.clearDispatchRoute(dispatchId);
-  };
-
   const handleSaveAdminCapacities = () => {
     Object.entries(zoneCapacities).forEach(([zoneId, capacity]) => {
       eventOperationsEngine.updateZoneCapacity(zoneId, capacity);
     });
     cesiumService.createOperationalZoneLayers();
     setAdminSuccessMsg('Zone capacities successfully updated and synchronized with Cesium.');
+    setTimeout(() => setAdminSuccessMsg(null), 3500);
+  };
+
+  const handleSaveDispatchWeights = () => {
+    dispatchEngine.updateWeights(dispatchWeights);
+    setAdminSuccessMsg('Dispatch recommendation weights & administrative policies successfully applied.');
+    setTimeout(() => setAdminSuccessMsg(null), 3500);
+  };
+
+  const handleResetDispatchWeights = () => {
+    const defaults = {
+      distanceWeight: 0.35,
+      categoryMatchWeight: 0.35,
+      workloadWeight: 0.15,
+      readinessWeight: 0.15,
+      requireAdminConfirmation: true,
+      allowEmergencyOverride: true,
+    };
+    dispatchEngine.updateWeights(defaults);
+    setDispatchWeights(defaults);
+    setAdminSuccessMsg('Dispatch recommendation weights restored to baseline standards.');
     setTimeout(() => setAdminSuccessMsg(null), 3500);
   };
 
@@ -324,7 +345,7 @@ export const EventOperationsCommandCenter: React.FC<EventOperationsCommandCenter
             { id: 'dispatch', label: `Dispatch Console (${dispatches.filter(d => d.status !== 'RESOLVED').length})`, icon: <Send className="w-4 h-4" /> },
             { id: 'medical', label: '108 Medical & Triage', icon: <HeartPulse className="w-4 h-4" /> },
             { id: 'facilities', label: `Public Amenities (${facilities.length})`, icon: <Building2 className="w-4 h-4" /> },
-            { id: 'analytics', label: 'Capacity Analytics', icon: <BarChart3 className="w-4 h-4" /> },
+            { id: 'analytics', label: 'Operations Analytics', icon: <BarChart3 className="w-4 h-4" /> },
             { id: 'logs', label: `Operations Log (${logs.length})`, icon: <FileText className="w-4 h-4" /> },
             { id: 'admin', label: 'Admin & Capacity Tuning', icon: <Sliders className="w-4 h-4" /> },
           ].map((tab) => (
@@ -767,124 +788,14 @@ export const EventOperationsCommandCenter: React.FC<EventOperationsCommandCenter
           {/* 4. DISPATCH CONSOLE TAB */}
           {/* ========================================================= */}
           {activeTab === 'dispatch' && (
-            <div className="space-y-6">
-              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-white text-sm">Automated Incident-to-Resource Dispatch Engine</h3>
-                  <p className="text-xs text-slate-400">
-                    Calculates planar Haversine distances to recommend nearest available response team with Cesium 3D corridor visualization
-                  </p>
-                </div>
-                <div className="text-xs font-mono text-cyan-400">
-                  Active Dispatches: {dispatches.filter(d => d.status !== 'RESOLVED').length}
-                </div>
-              </div>
-
-              {/* Active Dispatches List */}
-              <div className="space-y-4">
-                {dispatches.length > 0 ? (
-                  dispatches.map((disp) => (
-                    <div key={disp.id} className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-cyan-950 border border-cyan-500/40 text-cyan-400">
-                            <Send className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-bold text-white text-sm">{disp.incidentTitle}</h4>
-                              <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                                {disp.id}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-400">
-                              Assigned Team: <span className="text-white font-medium">{disp.resourceName}</span> ({disp.resourceCategory})
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 text-xs">
-                          <div className="font-mono text-slate-400">
-                            Distance: <span className="text-cyan-300 font-bold">{disp.distanceMeters} m</span>
-                          </div>
-                          <div className="font-mono text-slate-400">
-                            Est. ETA: <span className="text-amber-300 font-bold">{disp.estimatedArrivalMinutes} min</span>
-                          </div>
-                          <button
-                            onClick={() => cesiumService.renderDispatchRoute(disp)}
-                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs flex items-center gap-1 transition"
-                          >
-                            <Navigation className="w-3 h-3" /> View Route in 3D
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* 6-Stage Workflow Stepper */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2">
-                        {(['REPORTED', 'ACKNOWLEDGED', 'ASSIGNED', 'DISPATCHED', 'ON_SCENE', 'RESOLVED'] as const).map((step, idx) => {
-                          const steps = ['REPORTED', 'ACKNOWLEDGED', 'ASSIGNED', 'DISPATCHED', 'ON_SCENE', 'RESOLVED'];
-                          const currentIdx = steps.indexOf(disp.status);
-                          const isDone = idx <= currentIdx;
-                          const isCurrent = idx === currentIdx;
-
-                          return (
-                            <div 
-                              key={step} 
-                              className={`p-2.5 rounded-xl border text-center transition ${
-                                isCurrent 
-                                  ? 'bg-cyan-950/60 border-cyan-500 text-cyan-300 font-bold' 
-                                  : isDone 
-                                  ? 'bg-slate-900 border-slate-700 text-slate-300' 
-                                  : 'bg-slate-950/40 border-slate-800/60 text-slate-600'
-                              }`}
-                            >
-                              <div className="text-[10px] font-mono text-slate-500 mb-0.5">Stage {idx + 1}</div>
-                              <div className="text-xs">{step.replace('_', ' ')}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-                        <div className="text-xs text-slate-500 font-mono">
-                          Assigned: {disp.assignedTimestamp}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {disp.status !== 'RESOLVED' && (
-                            <button
-                              onClick={() => handleAdvanceDispatch(disp.id)}
-                              className="px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium flex items-center gap-1.5 transition"
-                            >
-                              <ArrowRight className="w-3.5 h-3.5" /> Advance to Next Stage
-                            </button>
-                          )}
-                          {disp.status === 'ON_SCENE' && (
-                            <button
-                              onClick={() => handleResolveDispatch(disp.id)}
-                              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium flex items-center gap-1.5 transition"
-                            >
-                              <Check className="w-3.5 h-3.5" /> Mark Incident Resolved
-                            </button>
-                          )}
-                          {disp.status === 'RESOLVED' && (
-                            <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
-                              <CheckCircle2 className="w-4 h-4" /> Mission Completed & Team Released
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-8 text-center text-xs text-slate-500 border border-slate-800 rounded-2xl bg-slate-900/40">
-                    <Send className="w-8 h-8 text-cyan-400 mx-auto mb-2 opacity-60" />
-                    No active dispatches. Select an active emergency incident from the Operations Overview to initiate automated unit dispatch.
-                  </div>
-                )}
-              </div>
-            </div>
+            <DispatchManagementConsole
+              onFlyToIncident={(incidentId) => {
+                cesiumService.flyToIncident(incidentId);
+              }}
+              onFlyToResource={(resourceId) => {
+                cesiumService.flyToResource(resourceId);
+              }}
+            />
           )}
 
           {/* ========================================================= */}
@@ -1041,86 +952,7 @@ export const EventOperationsCommandCenter: React.FC<EventOperationsCommandCenter
           {/* 7. OPERATIONS ANALYTICS TAB */}
           {/* ========================================================= */}
           {activeTab === 'analytics' && (
-            <div className="space-y-6">
-              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-                <h3 className="font-semibold text-white text-sm">Real-Time Operational Analytics</h3>
-                <p className="text-xs text-slate-400">Ghat sector crowd distributions, capacity margins, and flow dynamics</p>
-              </div>
-
-              {/* Charts Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Chart 1: Crowd Population by Sector */}
-                <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-4">
-                  <h4 className="font-semibold text-white text-xs flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-cyan-400" />
-                    Pilgrim Population by Operational Sector
-                  </h4>
-
-                  <div className="space-y-3">
-                    {zones.map((zone) => {
-                      const maxPop = Math.max(...zones.map(z => z.currentSimulatedPopulation));
-                      const barWidth = Math.max(5, (zone.currentSimulatedPopulation / maxPop) * 100);
-                      return (
-                        <div key={zone.id} className="space-y-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-slate-300">{zone.name}</span>
-                            <span className="font-mono text-cyan-400 font-bold">{zone.currentSimulatedPopulation.toLocaleString()} pax</span>
-                          </div>
-                          <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
-                            <div 
-                              className="h-full rounded-full bg-gradient-to-r from-cyan-600 to-cyan-400 transition-all duration-500"
-                              style={{ width: `${barWidth}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Chart 2: Inflow vs Outflow Rates */}
-                <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-4">
-                  <h4 className="font-semibold text-white text-xs flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-emerald-400" />
-                    Inflow vs Outflow Rate Dynamics (pax/min)
-                  </h4>
-
-                  <div className="space-y-3.5">
-                    {zones.map((zone) => (
-                      <div key={zone.id} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-300">{zone.name}</span>
-                          <span className="font-mono text-xs">
-                            <span className="text-emerald-400">+{zone.inflowRate}</span> / <span className="text-rose-400">-{zone.outflowRate}</span>
-                          </span>
-                        </div>
-                        <div className="flex gap-1 h-2.5">
-                          <div 
-                            className="bg-emerald-500 rounded-l-full transition-all duration-500" 
-                            style={{ width: `${(zone.inflowRate / (zone.inflowRate + zone.outflowRate)) * 100}%` }}
-                          />
-                          <div 
-                            className="bg-rose-500 rounded-r-full transition-all duration-500" 
-                            style={{ width: `${(zone.outflowRate / (zone.inflowRate + zone.outflowRate)) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-center gap-6 pt-2 text-xs text-slate-400">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded bg-emerald-500" />
-                      <span>Ingress (Inflow)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded bg-rose-500" />
-                      <span>Egress (Outflow)</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <OperationsAnalyticsDashboard />
           )}
 
           {/* ========================================================= */}
@@ -1263,6 +1095,159 @@ export const EventOperationsCommandCenter: React.FC<EventOperationsCommandCenter
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* DISPATCH RECOMMENDATION WEIGHTS & POLICIES */}
+              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-white text-sm flex items-center gap-2">
+                      <Sliders className="w-4 h-4 text-cyan-400" />
+                      Intelligent Dispatch Recommendation Weights & Automation Policies
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Configure multi-factor algorithmic scoring parameters: Total Score = (w_dist × S_dist) + (w_cat × S_cat) + (w_workload × S_workload) + (w_ready × S_ready)
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleResetDispatchWeights}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
+                    >
+                      Reset Baseline
+                    </button>
+                    <button
+                      onClick={handleSaveDispatchWeights}
+                      className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold flex items-center gap-1.5 transition"
+                    >
+                      <Check className="w-4 h-4" /> Save Dispatch Policies
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Distance Weight Slider */}
+                  <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-slate-300">Geographic Proximity Weight (w_dist)</span>
+                      <span className="font-mono font-bold text-cyan-400">
+                        {Math.round(dispatchWeights.distanceWeight * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={dispatchWeights.distanceWeight}
+                      onChange={(e) => setDispatchWeights(prev => ({ ...prev, distanceWeight: parseFloat(e.target.value) }))}
+                      className="w-full accent-cyan-400"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Prioritizes closer units via verified A* road & pedestrian corridors.
+                    </p>
+                  </div>
+
+                  {/* Category Match Weight Slider */}
+                  <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-slate-300">Category Suitability Weight (w_cat)</span>
+                      <span className="font-mono font-bold text-cyan-400">
+                        {Math.round(dispatchWeights.categoryMatchWeight * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={dispatchWeights.categoryMatchWeight}
+                      onChange={(e) => setDispatchWeights(prev => ({ ...prev, categoryMatchWeight: parseFloat(e.target.value) }))}
+                      className="w-full accent-cyan-400"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Matches incident specialization (e.g. 108 Ambulance / Medical for triage).
+                    </p>
+                  </div>
+
+                  {/* Workload Weight Slider */}
+                  <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-slate-300">Workload & Task Balance Weight (w_workload)</span>
+                      <span className="font-mono font-bold text-cyan-400">
+                        {Math.round(dispatchWeights.workloadWeight * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={dispatchWeights.workloadWeight}
+                      onChange={(e) => setDispatchWeights(prev => ({ ...prev, workloadWeight: parseFloat(e.target.value) }))}
+                      className="w-full accent-cyan-400"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Penalizes units already managing multiple queue items to avoid burnout.
+                    </p>
+                  </div>
+
+                  {/* Readiness Weight Slider */}
+                  <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-slate-300">Availability & Readiness Weight (w_ready)</span>
+                      <span className="font-mono font-bold text-cyan-400">
+                        {Math.round(dispatchWeights.readinessWeight * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={dispatchWeights.readinessWeight}
+                      onChange={(e) => setDispatchWeights(prev => ({ ...prev, readinessWeight: parseFloat(e.target.value) }))}
+                      className="w-full accent-cyan-400"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Prioritizes immediately AVAILABLE teams over DEPLOYED / BUSY units.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Policy Toggles */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+                    <input
+                      type="checkbox"
+                      checked={dispatchWeights.requireAdminConfirmation}
+                      onChange={(e) => setDispatchWeights(prev => ({ ...prev, requireAdminConfirmation: e.target.checked }))}
+                      className="mt-1 accent-cyan-500 rounded"
+                    />
+                    <div>
+                      <div className="text-xs font-semibold text-white">Require Manual Confirmation</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        Operators must explicitly confirm algorithmic recommendations before status moves to ASSIGNED.
+                      </div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+                    <input
+                      type="checkbox"
+                      checked={dispatchWeights.allowEmergencyOverride}
+                      onChange={(e) => setDispatchWeights(prev => ({ ...prev, allowEmergencyOverride: e.target.checked }))}
+                      className="mt-1 accent-cyan-500 rounded"
+                    />
+                    <div>
+                      <div className="text-xs font-semibold text-white">Enable Emergency Busy Overrides</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        Allows incident commanders to reassign or dual-assign units even when marked BUSY / ON-SCENE.
+                      </div>
+                    </div>
+                  </label>
+                </div>
               </div>
             </div>
           )}

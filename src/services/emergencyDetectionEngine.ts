@@ -242,6 +242,26 @@ export class EmergencyDetectionEngine {
     return newInc;
   }
 
+  public addCustomIncident(incident: EmergencyIncident): void {
+    const existing = this.incidents.find(i => i.id === incident.id);
+    if (existing) {
+      Object.assign(existing, incident);
+    } else {
+      this.incidents.unshift(incident);
+    }
+
+    if (incident.blockedEdge) {
+      const graph = (crowdEngine as any).graph as AStarGraph;
+      if (graph) {
+        graph.setEdgeBlocked(incident.blockedEdge.fromNodeId, incident.blockedEdge.toNodeId, true);
+      }
+    }
+
+    this.renderIncidentEntities();
+    this.renderEvacuationRoutes();
+    this.updateMetrics();
+  }
+
   /**
    * Recalculates alternate shortest paths for all agents facing blocked routes or closed gates
    */
@@ -571,6 +591,9 @@ export class EmergencyDetectionEngine {
           pixelOffset: new Cesium.Cartesian2(0, -20),
           distanceDisplayCondition: new Cesium.DistanceDisplayCondition(50, 7500),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        properties: {
+          incidentData: inc,
         },
       });
 

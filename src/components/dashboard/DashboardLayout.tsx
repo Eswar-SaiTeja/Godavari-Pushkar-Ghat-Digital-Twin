@@ -63,7 +63,13 @@ export const DashboardLayout: React.FC = () => {
   const [isGisValidationOpen, setIsGisValidationOpen] = useState<boolean>(false);
 
   // Day 4 Event Operations Command Center & Resource States
-  const [isOperationsCommandCenterOpen, setIsOperationsCommandCenterOpen] = useState<boolean>(false);
+  const [isOperationsCommandCenterOpen, setIsOperationsCommandCenterOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.has('ops');
+    }
+    return false;
+  });
   const [selectedResourceForInspection, setSelectedResourceForInspection] = useState<EventResource | null>(null);
 
   // Selected GIS Location (Pushkar Ghat selected by default for Day 1 discovery)
@@ -121,6 +127,9 @@ export const DashboardLayout: React.FC = () => {
     });
     cesiumService.setOnResourceSelect((resource) => {
       setSelectedResourceForInspection(resource);
+    });
+    cesiumService.setOnIncidentSelect((_incident) => {
+      setIsOperationsCommandCenterOpen(true);
     });
   }, []);
 

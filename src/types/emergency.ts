@@ -5,11 +5,13 @@ export type IncidentType =
   | 'FIRE_HAZARD' 
   | 'FLOOD_SURGE' 
   | 'VEHICLE_OBSTRUCTION' 
-  | 'STEP_BOTTLENECK';
+  | 'STEP_BOTTLENECK'
+  | 'MEDICAL_EMERGENCY'
+  | 'ADMIN_INCIDENT';
 
 export type IncidentSeverity = 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
 
-export type IncidentStatus = 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED';
+export type IncidentStatus = 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED' | 'CANCELLED';
 
 export interface EmergencyIncident {
   id: string;
@@ -21,6 +23,11 @@ export interface EmergencyIncident {
   affectedPopulation: number;
   status: IncidentStatus;
   description: string;
+  affectedZoneId?: string;
+  assignedResourceIds?: string[];
+  reportedTimestamp?: string;
+  acknowledgedTimestamp?: string;
+  resolvedTimestamp?: string;
   blockedEdge?: { fromNodeId: string; toNodeId: string };
   affectedGateId?: string;
 }

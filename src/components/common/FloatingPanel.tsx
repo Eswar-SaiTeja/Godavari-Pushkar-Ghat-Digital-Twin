@@ -114,7 +114,14 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     }
 
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(true);
+
+    const pointerId = e.pointerId;
+    const targetEl = e.currentTarget;
+    try {
+      targetEl.setPointerCapture(pointerId);
+    } catch (_) {}
 
     dragStartRef.current = {
       startX: e.clientX,
@@ -124,6 +131,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     };
 
     const onPointerMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
       const deltaX = moveEvent.clientX - dragStartRef.current.startX;
       const deltaY = moveEvent.clientY - dragStartRef.current.startY;
       const rawX = dragStartRef.current.initialX + deltaX;
@@ -136,8 +144,12 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
       setPosition(clamped);
     };
 
-    const onPointerUp = () => {
+    const onPointerUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== pointerId) return;
       setIsDragging(false);
+      try {
+        targetEl.releasePointerCapture(pointerId);
+      } catch (_) {}
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
@@ -210,6 +222,8 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
   return (
     <div
       ref={panelRef}
+      onWheel={(e) => e.stopPropagation()}
+      onWheelCapture={(e) => e.stopPropagation()}
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
@@ -217,7 +231,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
         height: isMinimized ? 'auto' : (typeof size.height === 'number' ? `${size.height}px` : 'auto'),
         maxHeight: isMinimized ? 'auto' : `min(${maxHeight}px, calc(100vh - ${Math.max(64, position.y)}px - 56px))`,
       }}
-      className={`fixed z-30 flex flex-col glass-panel rounded-xl border border-cyan-500/30 shadow-panel select-none overflow-hidden transition-shadow ${
+      className={`fixed z-30 flex flex-col glass-panel rounded-xl border border-cyan-500/30 shadow-panel select-none overflow-hidden transition-shadow pointer-events-auto ${
         isDragging ? 'shadow-glow-cyan cursor-grabbing opacity-95' : 'shadow-2xl'
       } ${className}`}
     >
@@ -283,7 +297,11 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
 
       {/* Panel Body Content (hidden when minimized) */}
       {!isMinimized && (
-        <div className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 custom-scrollbar flex flex-col overscroll-contain">
+        <div 
+          onWheel={(e) => e.stopPropagation()}
+          onWheelCapture={(e) => e.stopPropagation()}
+          className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 custom-scrollbar flex flex-col overscroll-contain select-text"
+        >
           {children}
         </div>
       )}
