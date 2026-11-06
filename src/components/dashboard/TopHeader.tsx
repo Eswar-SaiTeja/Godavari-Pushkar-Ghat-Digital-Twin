@@ -234,7 +234,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               title="Toggle Day 5 AI Intelligence Copilot"
             >
               <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-              <span className="hidden lg:inline font-mono font-semibold">AI Copilot</span>
+              <span className="hidden lg:inline font-mono font-semibold">JARVIS Copilot</span>
             </button>
           )}
 

@@ -1226,6 +1226,56 @@ export class CesiumService {
   }
 
   /**
+   * Dedicated JARVIS Map Action: Fly camera to named ghat
+   */
+  public flyToGhat(ghatId: string): void {
+    const target = GHAT_LOCATIONS.find(
+      g => g.id === ghatId || g.name.toLowerCase().includes(ghatId.toLowerCase())
+    );
+    if (target) {
+      this.flyToLocation(target);
+    }
+  }
+
+  /**
+   * Dedicated JARVIS Map Action: Focus and highlight an operational zone
+   */
+  public highlightZone(zoneId: string): void {
+    this.flyToZone(zoneId);
+    const entity = this.zoneEntities.get(zoneId);
+    if (entity && entity.polygon) {
+      entity.polygon.outlineColor = new Cesium.ConstantProperty(
+        Cesium.Color.fromCssColorString('#00ffff')
+      );
+      entity.polygon.outlineWidth = new Cesium.ConstantProperty(4);
+    }
+  }
+
+  /**
+   * Dedicated JARVIS Map Action: Focus and highlight an emergency incident
+   */
+  public focusIncident(incidentId: string): void {
+    this.flyToIncident(incidentId);
+  }
+
+  /**
+   * Dedicated JARVIS Map Action: Highlight designated evacuation egress corridors
+   */
+  public highlightEvacuationRoute(_routeId?: string): void {
+    this.emergencyEntities.forEach(entity => {
+      entity.show = true;
+      if (entity.polyline) {
+        entity.polyline.width = new Cesium.ConstantProperty(8);
+        entity.polyline.material = new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.35,
+          taperPower: 0.5,
+          color: Cesium.Color.fromCssColorString('#22c55e')
+        });
+      }
+    });
+  }
+
+  /**
    * Sets up screen space mouse click picking on GIS entities
    */
   private setupInteractionHandlers(onLocationSelect?: (location: GhatLocation | null) => void): void {

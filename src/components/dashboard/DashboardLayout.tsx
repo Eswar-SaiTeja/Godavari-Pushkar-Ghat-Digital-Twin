@@ -450,11 +450,42 @@ export const DashboardLayout: React.FC = () => {
             onSelectLocation={setSelectedLocation}
           />
 
-          {/* Day 5 AI Intelligence Copilot Drawer */}
+          {/* Day 5 AI Intelligence Copilot Drawer - JARVIS */}
           <AICopilotDrawer
             isOpen={isAICopilotOpen}
             onClose={() => setIsAICopilotOpen(false)}
             initialTab={aiCopilotTab}
+            onNavigateToModule={(module, tab) => {
+              switch (module) {
+                case 'OPERATIONS':
+                  setOperationsInitialTab((tab as any) || 'overview');
+                  setIsOperationsCommandCenterOpen(true);
+                  break;
+                case 'DISPATCH':
+                  setOperationsInitialTab('dispatch');
+                  setIsOperationsCommandCenterOpen(true);
+                  break;
+                case 'ANALYTICS':
+                  setOperationsInitialTab('analytics');
+                  setIsOperationsCommandCenterOpen(true);
+                  break;
+                case 'CROWD':
+                  setIsCrowdPanelOpen(true);
+                  break;
+                case 'EMERGENCY':
+                  setIsEmergencyPanelOpen(true);
+                  break;
+                case 'GIS_AUDIT':
+                  setIsGisValidationOpen(true);
+                  break;
+                case 'SCENARIO':
+                  setIsScenarioModalOpen(true);
+                  break;
+                case 'EVACUATION':
+                  setIsEmergencyPanelOpen(true);
+                  break;
+              }
+            }}
           />
         </main>
       </div>
