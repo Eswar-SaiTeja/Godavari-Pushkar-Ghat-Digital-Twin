@@ -19,8 +19,10 @@ import {
   X, 
   ChevronRight, 
   ChevronDown,
-  Minimize2
+  Minimize2,
+  LayoutGrid
 } from 'lucide-react';
+import { hudPositionManager } from '../../services/hudPositionManager';
 import { SIDEBAR_MODULES } from '../../config/modules';
 import { SidebarModuleId, ModuleDefinition } from '../../types/simulation';
 
@@ -696,6 +698,17 @@ export const GooeyLiquidNav: React.FC<GooeyLiquidNavProps> = ({
                   className="py-1 px-2 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/60 text-cyan-300 border border-cyan-500/30 text-center truncate font-semibold transition"
                 >
                   108 Dispatch
+                </button>
+              </div>
+
+              <div className="pt-1 text-[10px]">
+                <button
+                  onClick={() => hudPositionManager.resetAllPositions()}
+                  className="w-full py-1.5 px-2 rounded-lg bg-amber-950/40 hover:bg-amber-900/50 text-amber-300 border border-amber-500/30 text-center truncate font-semibold transition flex items-center justify-center gap-1.5"
+                  title="Reset all floating HUD panels to their initial viewport anchors"
+                >
+                  <LayoutGrid className="w-3 h-3 text-amber-400" />
+                  Reset All HUD Layout Positions
                 </button>
               </div>
             </div>

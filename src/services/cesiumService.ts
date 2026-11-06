@@ -145,17 +145,17 @@ export class CesiumService {
       }
     };
 
-    safeInit('River Water Surface', () => this.createRiverWaterSurface());
-    safeInit('Boundary Layers', () => this.createBoundaryLayers());
-    safeInit('Bridge Layers', () => this.createBridgeLayers());
-    safeInit('Buildings 3D', () => this.createBuildings3D());
-    safeInit('Ghat Location Markers', () => this.createGhatLocationMarkers());
-    safeInit('Emergency Evacuation Corridor', () => this.createEmergencyEvacuationCorridor());
-    safeInit('DEM Elevation Grid', () => this.createDemElevationGrid());
-    safeInit('Water Flow Vectors', () => this.createWaterFlowVectors());
-    safeInit('Crowd Density Overlay', () => this.createCrowdDensityOverlay());
-    safeInit('Operational Zone Layers', () => this.createOperationalZoneLayers());
-    safeInit('Resource Layers', () => this.createResourceLayers());
+    safeInit('River Water Surface', () => this.createRiverWaterSurface?.());
+    safeInit('Boundary Layers', () => this.createBoundaryLayers?.());
+    safeInit('Bridge Layers', () => this.createBridgeLayers?.());
+    safeInit('Buildings 3D', () => this.createBuildings3D?.());
+    safeInit('Ghat Location Markers', () => this.createGhatLocationMarkers?.());
+    safeInit('Emergency Evacuation Corridor', () => this.createEmergencyEvacuationCorridor?.());
+    safeInit('DEM Elevation Grid', () => this.createDemElevationGrid?.());
+    safeInit('Water Flow Vectors', () => this.createWaterFlowVectors?.());
+    safeInit('Crowd Density Overlay', () => this.createCrowdDensityOverlay?.());
+    safeInit('Operational Zone Layers', () => this.createOperationalZoneLayers?.());
+    safeInit('Resource Layers', () => this.createResourceLayers?.());
 
     log('8. Setting up interaction handlers...');
     this.setupInteractionHandlers(onLocationSelect);

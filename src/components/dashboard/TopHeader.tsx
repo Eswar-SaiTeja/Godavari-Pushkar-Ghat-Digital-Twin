@@ -15,10 +15,12 @@ import {
   Car,
   BarChart3,
   ShieldAlert,
-  User
+  User,
+  LayoutGrid
 } from 'lucide-react';
 import { Badge } from '../common/Badge';
 import { SimulationMode } from '../../types/simulation';
+import { hudPositionManager } from '../../services/hudPositionManager';
 
 interface TopHeaderProps {
   simulationTime: Date;
@@ -329,6 +331,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           >
             <Layers className="w-4 h-4" />
             <span className="hidden sm:inline font-mono font-semibold">Layers</span>
+          </button>
+
+          <button
+            onClick={() => hudPositionManager.resetAllPositions()}
+            className="p-2 rounded-lg bg-slate-800/80 text-slate-300 border border-slate-700/60 hover:text-amber-400 hover:border-amber-500/40 transition-colors flex items-center gap-1.5 text-xs"
+            title="Reset All Floating HUD Panels to Default Layout"
+          >
+            <LayoutGrid className="w-4 h-4 text-amber-400" />
+            <span className="hidden 2xl:inline font-mono font-semibold">Reset HUDs</span>
           </button>
 
           <button

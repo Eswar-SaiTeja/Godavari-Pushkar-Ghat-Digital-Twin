@@ -5,7 +5,8 @@ import { trafficEngine } from '../../services/trafficSimulation';
 import { emergencyEngine } from '../../services/emergencyDetectionEngine';
 import { GhatLocation, LayerVisibilityState } from '../../types/gis';
 import { CesiumNavigationControls } from './CesiumNavigationControls';
-import { Crosshair, Globe } from 'lucide-react';
+import { CameraHUD } from './CameraHUD';
+import { Globe } from 'lucide-react';
 
 interface CesiumViewerProps {
   layers: LayerVisibilityState;
@@ -174,39 +175,8 @@ export const CesiumViewer: React.FC<CesiumViewerProps> = ({
         altitudeMeters={telemetry.altitudeMeters}
       />
 
-      {/* Bottom-Left Real-Time Spatial Telemetry HUD */}
-      <div className="absolute bottom-20 left-4 z-10 select-none hidden sm:block">
-        <div className="glass-panel px-3 py-1.5 rounded-xl border border-cyan-500/30 font-mono text-[10px] text-slate-300 shadow-panel flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-cyan-300">
-            <Crosshair className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-            <span className="font-bold">CAMERA HUD:</span>
-          </div>
-
-          <div>
-            <span className="text-slate-400">LAT:</span>{' '}
-            <span className="text-slate-100 font-semibold">{telemetry.latitude.toFixed(4)}° N</span>
-          </div>
-
-          <div>
-            <span className="text-slate-400">LON:</span>{' '}
-            <span className="text-slate-100 font-semibold">{telemetry.longitude.toFixed(4)}° E</span>
-          </div>
-
-          <div>
-            <span className="text-slate-400">ALT:</span>{' '}
-            <span className="text-cyan-400 font-semibold">
-              {telemetry.altitudeMeters > 1000 
-                ? `${(telemetry.altitudeMeters / 1000).toFixed(2)} km` 
-                : `${telemetry.altitudeMeters} m`}
-            </span>
-          </div>
-
-          <div>
-            <span className="text-slate-400">HDG:</span>{' '}
-            <span className="text-slate-100 font-semibold">{telemetry.headingDeg}°</span>
-          </div>
-        </div>
-      </div>
+      {/* Draggable Real-Time Spatial Camera HUD */}
+      <CameraHUD telemetry={telemetry} />
     </div>
   );
 };
