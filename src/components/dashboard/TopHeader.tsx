@@ -3,24 +3,18 @@ import {
   Maximize2, 
   Minimize2, 
   RotateCcw, 
-  Layers, 
   Activity, 
   Clock, 
   Menu, 
   Sparkles, 
   Database, 
-  Radio,
-  CheckCircle2,
-  Users,
-  Car,
-  BarChart3,
-  ShieldAlert,
-  User,
+  Radio, 
   LayoutGrid
 } from 'lucide-react';
 import { Badge } from '../common/Badge';
 import { SimulationMode } from '../../types/simulation';
 import { hudPositionManager } from '../../services/hudPositionManager';
+import { TopGooeyTaskbar, GooeyModuleId } from '../navigation/TopGooeyTaskbar';
 
 interface TopHeaderProps {
   simulationTime: Date;
@@ -31,6 +25,10 @@ interface TopHeaderProps {
   isLayersPanelOpen: boolean;
   onToggleSidebar: () => void;
   terrainStatusMessage: string;
+  activeGooeyModule: GooeyModuleId;
+  onSelectGooeyModule: (id: GooeyModuleId) => void;
+  onToggleOverview?: () => void;
+  onToggle3DTwin?: () => void;
   onToggleCrowdPanel?: () => void;
   isCrowdPanelOpen?: boolean;
   onToggleTrafficPanel?: () => void;
@@ -38,14 +36,15 @@ interface TopHeaderProps {
   onToggleScenarioModal?: () => void;
   onToggleEmergencyCommandCenter?: () => void;
   isEmergencyCommandCenterOpen?: boolean;
-  onToggleOperationsCommandCenter?: () => void;
+  onToggleOperationsCommandCenter?: (tab?: string) => void;
   isOperationsCommandCenterOpen?: boolean;
   onToggleAgentInspector?: () => void;
   isAgentInspectorOpen?: boolean;
   onToggleGisValidation?: () => void;
   isGisValidationOpen?: boolean;
-  onToggleAICopilot?: () => void;
+  onToggleAICopilot?: (tab?: string) => void;
   isAICopilotOpen?: boolean;
+  onToggleFlood?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -54,24 +53,29 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onSimulationModeChange,
   onResetMap,
   onToggleLayersPanel,
-  isLayersPanelOpen,
+  isLayersPanelOpen: _isLayersPanelOpen,
   onToggleSidebar,
   terrainStatusMessage,
+  activeGooeyModule,
+  onSelectGooeyModule,
+  onToggleOverview,
+  onToggle3DTwin,
   onToggleCrowdPanel,
-  isCrowdPanelOpen,
+  isCrowdPanelOpen: _isCrowdPanelOpen,
   onToggleTrafficPanel,
-  isTrafficPanelOpen,
+  isTrafficPanelOpen: _isTrafficPanelOpen,
   onToggleScenarioModal,
   onToggleEmergencyCommandCenter,
-  isEmergencyCommandCenterOpen,
+  isEmergencyCommandCenterOpen: _isEmergencyCommandCenterOpen,
   onToggleOperationsCommandCenter,
-  isOperationsCommandCenterOpen,
-  onToggleAgentInspector,
-  isAgentInspectorOpen,
-  onToggleGisValidation,
-  isGisValidationOpen,
+  isOperationsCommandCenterOpen: _isOperationsCommandCenterOpen,
+  onToggleAgentInspector: _onToggleAgentInspector,
+  isAgentInspectorOpen: _isAgentInspectorOpen,
+  onToggleGisValidation: _onToggleGisValidation,
+  isGisValidationOpen: _isGisValidationOpen,
   onToggleAICopilot,
-  isAICopilotOpen,
+  isAICopilotOpen: _isAICopilotOpen,
+  onToggleFlood,
 }) => {
   const [isFullscreen, setIsFullscreen] = React.useState<boolean>(false);
 
@@ -199,7 +203,28 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </div>
       </div>
 
-      {/* Right: Clock, Telemetry Status & Actions */}
+      {/* Center-Right: Floating Gooey Menu Taskbar */}
+      <div className="flex items-center gap-2">
+        <TopGooeyTaskbar
+          activeModuleId={activeGooeyModule}
+          onSelectModule={onSelectGooeyModule}
+          onToggleOverview={onToggleOverview}
+          onToggle3DTwin={onToggle3DTwin}
+          onToggleOperations={onToggleOperationsCommandCenter}
+          onToggleEmergency={onToggleEmergencyCommandCenter}
+          onToggleAICopilot={onToggleAICopilot}
+          onToggleCrowd={onToggleCrowdPanel}
+          onToggleTraffic={onToggleTrafficPanel}
+          onToggleFlood={onToggleFlood}
+          onToggleEvacuation={onToggleScenarioModal || onToggleEmergencyCommandCenter}
+          onToggleEventOps={() => onToggleOperationsCommandCenter?.('resources')}
+          onToggleDispatch={() => onToggleOperationsCommandCenter?.('dispatch')}
+          onToggleAnalytics={() => onToggleOperationsCommandCenter?.('analytics')}
+          onToggleSettings={onToggleLayersPanel}
+        />
+      </div>
+
+      {/* Right: Clock, Telemetry Status & Utility Actions */}
       <div className="flex items-center gap-2 md:gap-3">
         {/* Live Simulation Clock */}
         <div className="flex flex-col items-end px-2 py-0.5 rounded bg-slate-900/80 border border-slate-800">
@@ -221,137 +246,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </Badge>
         </div>
 
-        {/* Action Buttons */}
+        {/* Utility Actions */}
         <div className="flex items-center gap-1.5">
-          {onToggleAICopilot && (
-            <button
-              onClick={onToggleAICopilot}
-              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
-                isAICopilotOpen 
-                  ? 'bg-purple-500/20 text-purple-300 border-purple-400/60 shadow-glow-sm' 
-                  : 'bg-slate-800/80 text-purple-300 border-purple-500/30 hover:bg-purple-950/40 hover:border-purple-400/60'
-              }`}
-              title="Toggle Day 5 AI Intelligence Copilot"
-            >
-              <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-              <span className="hidden lg:inline font-mono font-semibold">JARVIS Copilot</span>
-            </button>
-          )}
-
-          {onToggleOperationsCommandCenter && (
-            <button
-              onClick={onToggleOperationsCommandCenter}
-              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
-                isOperationsCommandCenterOpen 
-                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/60 shadow-glow-sm' 
-                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-cyan-400 hover:border-cyan-500/40'
-              }`}
-              title="Toggle Day 4 Event Operations Command Center"
-            >
-              <Radio className="w-4 h-4 text-cyan-400" />
-              <span className="hidden lg:inline font-mono font-semibold">Operations</span>
-            </button>
-          )}
-
-          {onToggleEmergencyCommandCenter && (
-            <button
-              onClick={onToggleEmergencyCommandCenter}
-              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
-                isEmergencyCommandCenterOpen 
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-400/60 shadow-glow-sm animate-pulse' 
-                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-rose-400 hover:border-rose-500/40'
-              }`}
-              title="Toggle Intelligent Emergency Command Center"
-            >
-              <ShieldAlert className="w-4 h-4 text-rose-400" />
-              <span className="hidden lg:inline font-mono font-semibold">Evacuation</span>
-            </button>
-          )}
-
-          {onToggleAgentInspector && (
-            <button
-              onClick={onToggleAgentInspector}
-              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
-                isAgentInspectorOpen 
-                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/60 shadow-glow-sm' 
-                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-cyan-400 hover:border-cyan-500/40'
-              }`}
-              title="Inspect Individual Pedestrian Agents"
-            >
-              <User className="w-4 h-4 text-cyan-400" />
-              <span className="hidden lg:inline font-mono font-semibold">Agent</span>
-            </button>
-          )}
-
-          {onToggleCrowdPanel && (
-            <button
-              onClick={onToggleCrowdPanel}
-              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
-                isCrowdPanelOpen 
-                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/60 shadow-glow-sm' 
-                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-cyan-400 hover:border-cyan-500/40'
-              }`}
-              title="Toggle Crowd Simulation Controls"
-            >
-              <Users className="w-4 h-4 text-cyan-400" />
-              <span className="hidden lg:inline font-mono font-semibold">Crowd</span>
-            </button>
-          )}
-
-          {onToggleTrafficPanel && (
-            <button
-              onClick={onToggleTrafficPanel}
-              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
-                isTrafficPanelOpen 
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/60 shadow-glow-sm' 
-                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-emerald-400 hover:border-emerald-500/40'
-              }`}
-              title="Toggle Traffic Simulation Controls"
-            >
-              <Car className="w-4 h-4 text-emerald-400" />
-              <span className="hidden lg:inline font-mono font-semibold">Traffic</span>
-            </button>
-          )}
-
-          {onToggleScenarioModal && (
-            <button
-              onClick={onToggleScenarioModal}
-              className="p-2 rounded-lg bg-slate-800/80 text-slate-300 border border-slate-700/60 hover:text-amber-400 hover:border-amber-500/40 transition-colors flex items-center gap-1.5 text-xs"
-              title="Compare Evacuation Scenarios"
-            >
-              <BarChart3 className="w-4 h-4 text-amber-400" />
-              <span className="hidden lg:inline font-mono font-semibold">Scenarios</span>
-            </button>
-          )}
-
-          {onToggleGisValidation && (
-            <button
-              onClick={onToggleGisValidation}
-              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
-                isGisValidationOpen 
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/60 shadow-glow-sm' 
-                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-emerald-400 hover:border-emerald-500/40'
-              }`}
-              title="Open GIS Data Quality & WGS84 Accuracy Audit Panel"
-            >
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span className="hidden xl:inline font-mono font-semibold">GIS Audit</span>
-            </button>
-          )}
-
-          <button
-            onClick={onToggleLayersPanel}
-            className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
-              isLayersPanelOpen 
-                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/60 shadow-glow-sm' 
-                : 'bg-slate-800/80 text-slate-300 border-slate-700/60 hover:text-cyan-400 hover:border-cyan-500/40'
-            }`}
-            title="Toggle GIS Layers Panel"
-          >
-            <Layers className="w-4 h-4" />
-            <span className="hidden sm:inline font-mono font-semibold">Layers</span>
-          </button>
-
           <button
             onClick={() => hudPositionManager.resetAllPositions()}
             className="p-2 rounded-lg bg-slate-800/80 text-slate-300 border border-slate-700/60 hover:text-amber-400 hover:border-amber-500/40 transition-colors flex items-center gap-1.5 text-xs"

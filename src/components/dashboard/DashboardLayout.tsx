@@ -18,6 +18,8 @@ import { GisValidationModal } from '../panels/GisValidationModal';
 import { EventOperationsCommandCenter, TabType as OperationsTabType } from '../operations/EventOperationsCommandCenter';
 import { ResourceInspectorModal } from '../operations/ResourceInspectorModal';
 import { AICopilotDrawer } from '../ai/AICopilotDrawer';
+import { OverviewDashboard } from './OverviewDashboard';
+import { GooeyModuleId } from '../navigation/TopGooeyTaskbar';
 import { EventResource } from '../../types/operations';
 import { 
   LayerVisibilityState, 
@@ -90,6 +92,8 @@ export const DashboardLayout: React.FC = () => {
     return false;
   });
   const [aiCopilotTab, setAiCopilotTab] = useState<'chat' | 'predictions' | 'anomalies' | 'flood' | 'approvals' | 'audit'>('chat');
+  const [activeGooeyModule, setActiveGooeyModule] = useState<GooeyModuleId>('overview');
+  const [currentViewMode, setCurrentViewMode] = useState<'OVERVIEW' | '3D_MAP'>('OVERVIEW');
 
   // Selected GIS Location (Pushkar Ghat selected by default for Day 1 discovery)
   const [selectedLocation, setSelectedLocation] = useState<GhatLocation | null>(GHAT_LOCATIONS[0]);
@@ -259,9 +263,61 @@ export const DashboardLayout: React.FC = () => {
     trafficEngine.dispatchEmergencyAmbulance();
   };
 
+  const handleSelectGooeyModule = (modId: GooeyModuleId) => {
+    setActiveGooeyModule(modId);
+    switch (modId) {
+      case 'overview':
+        setCurrentViewMode('OVERVIEW');
+        break;
+      case '3d_twin':
+        setCurrentViewMode('3D_MAP');
+        cesiumService.flyToInitialPosition();
+        break;
+      case 'operations':
+        setOperationsInitialTab('overview');
+        setIsOperationsCommandCenterOpen(true);
+        break;
+      case 'event_ops':
+        setOperationsInitialTab('resources');
+        setIsOperationsCommandCenterOpen(true);
+        break;
+      case 'dispatch':
+        setOperationsInitialTab('dispatch');
+        setIsOperationsCommandCenterOpen(true);
+        break;
+      case 'analytics':
+        setOperationsInitialTab('analytics');
+        setIsOperationsCommandCenterOpen(true);
+        break;
+      case 'emergency':
+        setIsEmergencyPanelOpen(true);
+        break;
+      case 'evacuation_planning':
+        setIsEmergencyScenarioBuilderOpen(true);
+        break;
+      case 'crowd_sim':
+        setIsCrowdPanelOpen(true);
+        break;
+      case 'traffic_sim':
+        setIsTrafficPanelOpen(true);
+        break;
+      case 'flood_sim':
+        setAiCopilotTab('flood');
+        setIsAICopilotOpen(true);
+        break;
+      case 'ai_agent':
+        setAiCopilotTab('chat');
+        setIsAICopilotOpen(true);
+        break;
+      case 'settings':
+        setIsLayersPanelOpen(true);
+        break;
+    }
+  };
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#050811] flex flex-col font-sans select-none">
-      {/* 1. Top Header */}
+      {/* 1. Top Header with Floating Gooey Taskbar */}
       <TopHeader
         simulationTime={simulatedTime}
         simulationMode={simulationMode}
@@ -271,6 +327,17 @@ export const DashboardLayout: React.FC = () => {
         isLayersPanelOpen={isLayersPanelOpen}
         onToggleSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
         terrainStatusMessage={terrainStatus.message}
+        activeGooeyModule={activeGooeyModule}
+        onSelectGooeyModule={handleSelectGooeyModule}
+        onToggleOverview={() => {
+          setCurrentViewMode('OVERVIEW');
+          setActiveGooeyModule('overview');
+        }}
+        onToggle3DTwin={() => {
+          setCurrentViewMode('3D_MAP');
+          setActiveGooeyModule('3d_twin');
+          cesiumService.flyToInitialPosition();
+        }}
         onToggleCrowdPanel={() => setIsCrowdPanelOpen(prev => !prev)}
         isCrowdPanelOpen={isCrowdPanelOpen}
         onToggleTrafficPanel={() => setIsTrafficPanelOpen(prev => !prev)}
@@ -278,14 +345,24 @@ export const DashboardLayout: React.FC = () => {
         onToggleScenarioModal={() => setIsEmergencyScenarioBuilderOpen(true)}
         onToggleEmergencyCommandCenter={() => setIsEmergencyPanelOpen(prev => !prev)}
         isEmergencyCommandCenterOpen={isEmergencyPanelOpen}
-        onToggleOperationsCommandCenter={() => setIsOperationsCommandCenterOpen(prev => !prev)}
+        onToggleOperationsCommandCenter={(tab) => {
+          setOperationsInitialTab((tab as any) || 'overview');
+          setIsOperationsCommandCenterOpen(true);
+        }}
         isOperationsCommandCenterOpen={isOperationsCommandCenterOpen}
         onToggleAgentInspector={() => setIsAgentInspectorOpen(prev => !prev)}
         isAgentInspectorOpen={isAgentInspectorOpen}
         onToggleGisValidation={() => setIsGisValidationOpen(prev => !prev)}
         isGisValidationOpen={isGisValidationOpen}
-        onToggleAICopilot={() => setIsAICopilotOpen(prev => !prev)}
+        onToggleAICopilot={(tab) => {
+          setAiCopilotTab((tab as any) || 'chat');
+          setIsAICopilotOpen(true);
+        }}
         isAICopilotOpen={isAICopilotOpen}
+        onToggleFlood={() => {
+          setAiCopilotTab('flood');
+          setIsAICopilotOpen(true);
+        }}
       />
 
       {/* Main Body: Gooey Liquid Navigation + Full-Screen Cesium Map Viewport */}
@@ -313,6 +390,31 @@ export const DashboardLayout: React.FC = () => {
 
         {/* 3. Main Full-Screen Cesium Globe Viewport */}
         <main className="relative flex-1 w-full h-full">
+          {/* Redesigned Overview Dashboard (Visible when currentViewMode === 'OVERVIEW') */}
+          {currentViewMode === 'OVERVIEW' && (
+            <div className="absolute inset-0 z-20 w-full h-full bg-[#050811]">
+              <OverviewDashboard
+                onSwitchTo3DMap={() => {
+                  setCurrentViewMode('3D_MAP');
+                  setActiveGooeyModule('3d_twin');
+                  cesiumService.flyToInitialPosition();
+                }}
+                onOpenOperations={(tab) => {
+                  setOperationsInitialTab((tab as any) || 'overview');
+                  setIsOperationsCommandCenterOpen(true);
+                }}
+                onOpenEmergency={() => setIsEmergencyPanelOpen(true)}
+                onOpenAICopilot={(tab) => {
+                  setAiCopilotTab((tab as any) || 'chat');
+                  setIsAICopilotOpen(true);
+                }}
+                onOpenCrowdControls={() => setIsCrowdPanelOpen(true)}
+                onOpenTrafficControls={() => setIsTrafficPanelOpen(true)}
+                onOpenScenarioModal={() => setIsScenarioModalOpen(true)}
+              />
+            </div>
+          )}
+
           {/* Cesium 3D Globe Viewer */}
           <CesiumViewer
             layers={layers}
