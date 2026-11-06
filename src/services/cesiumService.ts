@@ -42,6 +42,8 @@ export class CesiumService {
   private resourceEntities: Map<string, Cesium.Entity> = new Map();
   private zoneEntities: Map<string, Cesium.Entity> = new Map();
   private dispatchRouteEntities: Map<string, Cesium.Entity> = new Map();
+  private anomalyEntities: Cesium.Entity[] = [];
+  private predictedRouteEntities: Cesium.Entity[] = [];
   private onResourceSelectCallback?: (resource: EventResource) => void;
   private onZoneSelectCallback?: (zone: OperationalZone) => void;
   private onIncidentSelectCallback?: (incident: EmergencyIncident) => void;
@@ -1276,6 +1278,132 @@ export class CesiumService {
   }
 
   /**
+   * Predictive Intelligence Visualization: Update crowd density heatmaps based on forecast horizon
+   */
+  public updatePredictedCrowdOverlays(horizonMinutes: 15 | 30 | 60): void {
+    if (!this.viewer) return;
+    const factor = horizonMinutes === 15 ? 1.15 : horizonMinutes === 30 ? 1.35 : 1.60;
+
+    this.crowdDensityEntities.forEach((entity, idx) => {
+      if (entity.ellipse) {
+        const baseRadius = idx === 0 ? 120 : idx === 1 ? 160 : 100;
+        const newRadius = Math.round(baseRadius * factor);
+        entity.ellipse.semiMajorAxis = new Cesium.ConstantProperty(newRadius);
+        entity.ellipse.semiMinorAxis = new Cesium.ConstantProperty(newRadius);
+
+        // Shift color towards red for high forecast surge
+        const colorHex = factor >= 1.5 ? '#ef4444' : factor >= 1.3 ? '#f59e0b' : '#06b6d4';
+        entity.ellipse.material = new Cesium.ColorMaterialProperty(
+          Cesium.Color.fromCssColorString(colorHex).withAlpha(0.28)
+        );
+        entity.ellipse.outlineColor = new Cesium.ConstantProperty(
+          Cesium.Color.fromCssColorString(colorHex).withAlpha(0.9)
+        );
+      }
+    });
+  }
+
+  /**
+   * Predictive Intelligence Visualization: Display 3D Anomaly Markers on Cesium
+   */
+  public displayAnomalyMarkers(anomalies: Array<{ id: string; title: string; coordinates: [number, number]; severity: string }>): void {
+    if (!this.viewer) return;
+
+    // Clear previous anomaly markers
+    this.anomalyEntities.forEach(e => this.viewer!.entities.remove(e));
+    this.anomalyEntities = [];
+
+    anomalies.forEach(anom => {
+      const color = anom.severity === 'CRITICAL' ? '#ef4444' : anom.severity === 'HIGH' ? '#f59e0b' : '#38bdf8';
+      const marker = this.viewer!.entities.add({
+        id: `anom-marker-${anom.id}`,
+        name: `[ANOMALY] ${anom.title}`,
+        position: Cesium.Cartesian3.fromDegrees(anom.coordinates[0], anom.coordinates[1], 35),
+        point: {
+          pixelSize: 14,
+          color: Cesium.Color.fromCssColorString(color),
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        label: {
+          text: `⚠️ ${anom.title.slice(0, 32)}...`,
+          font: 'bold 11px monospace',
+          fillColor: Cesium.Color.WHITE,
+          backgroundColor: Cesium.Color.fromCssColorString('#020617').withAlpha(0.85),
+          showBackground: true,
+          backgroundPadding: new Cesium.Cartesian2(7, 4),
+          pixelOffset: new Cesium.Cartesian2(0, -26),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        }
+      });
+      this.anomalyEntities.push(marker);
+    });
+  }
+
+  /**
+   * Predictive Intelligence Visualization: Display A* Alternative Evacuation Route Corridor
+   */
+  public displayAlternativeEvacuationRoute(routeCoords: [number, number][], isOptimized: boolean = true): void {
+    if (!this.viewer) return;
+
+    this.predictedRouteEntities.forEach(e => this.viewer!.entities.remove(e));
+    this.predictedRouteEntities = [];
+
+    const positions = routeCoords.map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1], 18));
+    const colorHex = isOptimized ? '#22c55e' : '#f59e0b';
+
+    const routeLine = this.viewer.entities.add({
+      id: `ai-evac-corridor-${Date.now()}`,
+      name: isOptimized ? 'AI-Optimized Alternative Egress Route [A* Graph]' : 'Baseline Egress Route',
+      polyline: {
+        positions,
+        width: 7,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.35,
+          taperPower: 0.4,
+          color: Cesium.Color.fromCssColorString(colorHex)
+        }),
+        clampToGround: true
+      }
+    });
+
+    this.predictedRouteEntities.push(routeLine);
+  }
+
+  /**
+   * Predictive Intelligence Visualization: Dynamic Godavari River Water Level Adjustment
+   */
+  public updateSimulatedFloodLevel(waterLevelMsl: number): void {
+    if (!this.viewer) return;
+
+    this.riverWaterEntities.forEach(entity => {
+      if (entity.polygon) {
+        entity.polygon.height = new Cesium.ConstantProperty(waterLevelMsl);
+        // Shift water tint based on severity
+        const alpha = waterLevelMsl >= 17.5 ? 0.65 : waterLevelMsl >= 16.0 ? 0.50 : 0.35;
+        const waterColor = waterLevelMsl >= 17.5 ? '#b91c1c' : waterLevelMsl >= 16.0 ? '#b45309' : '#0284c7';
+        entity.polygon.material = new Cesium.ColorMaterialProperty(
+          Cesium.Color.fromCssColorString(waterColor).withAlpha(alpha)
+        );
+      }
+    });
+  }
+
+  /**
+   * Predictive Intelligence Visualization: Highlight Recommended Unit on Cesium
+   */
+  public highlightRecommendedResource(resourceId: string): void {
+    this.flyToResource(resourceId);
+    const entity = this.resourceEntities.get(resourceId);
+    if (entity && entity.point) {
+      entity.point.pixelSize = new Cesium.ConstantProperty(22);
+      entity.point.outlineColor = new Cesium.ConstantProperty(Cesium.Color.fromCssColorString('#00ffff'));
+      entity.point.outlineWidth = new Cesium.ConstantProperty(4);
+    }
+  }
+
+  /**
    * Sets up screen space mouse click picking on GIS entities
    */
   private setupInteractionHandlers(onLocationSelect?: (location: GhatLocation | null) => void): void {
@@ -1920,6 +2048,10 @@ export class CesiumService {
     this.resourceEntities.clear();
     this.zoneEntities.clear();
     this.dispatchRouteEntities.clear();
+    this.anomalyEntities.forEach(e => this.viewer?.entities.remove(e));
+    this.anomalyEntities = [];
+    this.predictedRouteEntities.forEach(e => this.viewer?.entities.remove(e));
+    this.predictedRouteEntities = [];
     this.onResourceSelectCallback = undefined;
     this.onZoneSelectCallback = undefined;
     this.onIncidentSelectCallback = undefined;

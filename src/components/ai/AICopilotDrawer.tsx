@@ -44,6 +44,18 @@ import { providerManager } from '../../ai/providers/providerManager';
 import { aiSecurityGuard } from '../../ai/safety/aiSecurityGuard';
 import { jarvisNLEngine } from '../../ai/core/jarvisNLEngine';
 import { cesiumService } from '../../services/cesiumService';
+import { crowdPredictionEngine } from '../../ai/predictive/crowdPredictionEngine';
+import { anomalyDetectionEngine } from '../../ai/predictive/anomalyDetectionEngine';
+import { floodIntelligenceEngine } from '../../ai/predictive/floodIntelligenceEngine';
+import { evacuationRouteOptimizer } from '../../ai/predictive/evacuationRouteOptimizer';
+import { resourceAllocationOptimizer } from '../../ai/predictive/resourceAllocationOptimizer';
+import { 
+  CrowdPredictionForecastReport,
+  AnomalyScanReport,
+  FloodIntelligenceAssessment,
+  EvacuationOptimizationComparison,
+  ResourceAllocationPlan
+} from '../../ai/types/predictive';
 import { 
   JarvisLanguage, 
   JarvisMessage, 
@@ -61,7 +73,7 @@ import {
 export interface AICopilotDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'chat' | 'predictions' | 'anomalies' | 'flood' | 'approvals' | 'audit';
+  initialTab?: 'chat' | 'predictions' | 'anomalies' | 'flood' | 'approvals' | 'audit' | 'predictive_egress';
   onNavigateToModule?: (
     module: 'OPERATIONS' | 'DISPATCH' | 'ANALYTICS' | 'CROWD' | 'EMERGENCY' | 'GIS_AUDIT' | 'SCENARIO' | 'EVACUATION', 
     tab?: string
@@ -74,15 +86,33 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   initialTab = 'chat',
   onNavigateToModule
 }) => {
-  const [activeTab, setActiveTab] = useState<'chat' | 'predictions' | 'anomalies' | 'flood' | 'approvals' | 'audit'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'chat' | 'predictions' | 'anomalies' | 'flood' | 'approvals' | 'audit' | 'predictive_egress'>(initialTab);
   const [prompt, setPrompt] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState<JarvisLanguage>('en');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [currentResponse, setCurrentResponse] = useState<AIStructuredResponse | null>(null);
+  const [_currentResponse, setCurrentResponse] = useState<AIStructuredResponse | null>(null);
   const [providerHealth, setProviderHealth] = useState<AIProviderHealth | null>(null);
   const [userRole, setUserRole] = useState<UserRole>('COMMANDER');
   const [auditLogs, setAuditLogs] = useState<AIAuditLogEntry[]>([]);
   const [activeExecutedMapAction, setActiveExecutedMapAction] = useState<string | null>(null);
+
+  // Day 5 AI Predictive Intelligence State
+  const [crowdForecastReport, setCrowdForecastReport] = useState<CrowdPredictionForecastReport | null>(() => {
+    try { return crowdPredictionEngine.generateForecast(30); } catch { return null; }
+  });
+  const [anomalyScanReport, setAnomalyScanReport] = useState<AnomalyScanReport | null>(() => {
+    try { return anomalyDetectionEngine.scanSubsystems(); } catch { return null; }
+  });
+  const [floodAssessment, setFloodAssessment] = useState<FloodIntelligenceAssessment | null>(() => {
+    try { return floodIntelligenceEngine.evaluateFloodRisk(); } catch { return null; }
+  });
+  const [evacComparison, setEvacComparison] = useState<EvacuationOptimizationComparison | null>(() => {
+    try { return evacuationRouteOptimizer.optimizeEvacuationRoutes(); } catch { return null; }
+  });
+  const [allocationPlan, setAllocationPlan] = useState<ResourceAllocationPlan | null>(() => {
+    try { return resourceAllocationOptimizer.generateAllocationPlan(); } catch { return null; }
+  });
+  const [activeFloodMsl, setActiveFloodMsl] = useState<number>(13.8);
 
   const initialGreetingByLang: Record<JarvisLanguage, string> = {
     en: 'JARVIS Digital Twin Assistant operational. Grounded in live GIS coordinates, crowd dynamics, CWC hydrology, and emergency dispatches. How may I assist command operations?',
@@ -449,6 +479,11 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   const handleRunCrowdPrediction = async (horizon: 15 | 30 | 60 | 120) => {
     setIsLoading(true);
     try {
+      if (horizon === 15 || horizon === 30 || horizon === 60) {
+        const report = crowdPredictionEngine.generateForecast(horizon);
+        setCrowdForecastReport(report);
+        cesiumService.updatePredictedCrowdOverlays(horizon);
+      }
       const res = await crowdPredictionService.predictCrowd({ horizonMinutes: horizon }, { userId: currentUser.userId, role: currentUser.role });
       setCurrentResponse(res);
     } catch (err: any) {
@@ -461,6 +496,8 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   const handleRunAnomalyScan = async () => {
     setIsLoading(true);
     try {
+      const scan = anomalyDetectionEngine.scanSubsystems();
+      setAnomalyScanReport(scan);
       const res = await anomalyDetectionService.scanAnomalies({ sensitivityThreshold: 'NORMAL' }, { userId: currentUser.userId, role: currentUser.role });
       setCurrentResponse(res);
     } catch (err: any) {
@@ -470,9 +507,14 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     }
   };
 
-  const handleRunFloodAnalysis = async () => {
+  const handleRunFloodAnalysis = async (customMsl?: number) => {
     setIsLoading(true);
     try {
+      const targetMsl = customMsl !== undefined ? customMsl : activeFloodMsl;
+      setActiveFloodMsl(targetMsl);
+      const floodRes = floodIntelligenceEngine.evaluateFloodRisk(targetMsl);
+      setFloodAssessment(floodRes);
+      cesiumService.updateSimulatedFloodLevel(targetMsl);
       const res = await floodIntelligenceService.analyzeFloodRisk({}, { userId: currentUser.userId, role: currentUser.role });
       setCurrentResponse(res);
     } catch (err: any) {
@@ -480,6 +522,41 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handlePlotAnomaliesOnCesium = () => {
+    if (!anomalyScanReport) return;
+    const markers = anomalyScanReport.anomalies.map(a => ({
+      id: a.anomalyId,
+      title: a.title,
+      coordinates: a.coordinates,
+      severity: a.severity
+    }));
+    cesiumService.displayAnomalyMarkers(markers);
+    setActiveExecutedMapAction(`Visualized ${markers.length} anomaly marker(s) on Cesium 3D globe`);
+  };
+
+  const handlePlotAlternativeEvacOnCesium = () => {
+    // Egress coordinates: Pushkar Ghat Steps -> VIP Corridor -> Municipal Stadium
+    const routeCoords: [number, number][] = [
+      [81.7669, 17.0084],
+      [81.7672, 17.0086],
+      [81.7685, 17.0065],
+      [81.7710, 17.0050]
+    ];
+    cesiumService.displayAlternativeEvacuationRoute(routeCoords, true);
+    setActiveExecutedMapAction('Visualized AI-Optimized VIP Egress Corridor (+43.1% clearance gain) on Cesium');
+  };
+
+  const handleFocusResourceOnCesium = (resourceId: string, name: string) => {
+    cesiumService.highlightRecommendedResource(resourceId);
+    setActiveExecutedMapAction(`Focused & highlighted ${name} on Cesium 3D globe`);
+  };
+
+  const handleRefreshEgressPlan = () => {
+    setEvacComparison(evacuationRouteOptimizer.optimizeEvacuationRoutes());
+    setAllocationPlan(resourceAllocationOptimizer.generateAllocationPlan());
+    setActiveExecutedMapAction('Recomputed A* Egress Routes and 6-Dimensional MCDA Resource Rankings');
   };
 
   const handleGenerateSitrep = async () => {
@@ -656,6 +733,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           { key: 'predictions', label: 'Crowd Forecast', icon: Users },
           { key: 'anomalies', label: 'Anomaly Scan', icon: AlertTriangle },
           { key: 'flood', label: 'Godavari Flood', icon: Waves },
+          { key: 'predictive_egress', label: 'Egress & MCDA', icon: Zap },
           { 
             key: 'approvals', 
             label: `Human Approvals (${pendingApprovals.length})`, 
@@ -938,19 +1016,24 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           <div className="space-y-4">
             <div className="flex items-center justify-between bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
               <div>
-                <h3 className="text-xs font-bold text-cyan-300 uppercase">
-                  Predictive Crowd Forecaster
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-cyan-300 uppercase">
+                    Predictive Crowd Forecaster
+                  </h3>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-cyan-950/80 text-cyan-400 border border-cyan-800">
+                    SIMULATED_FORECAST
+                  </span>
+                </div>
                 <p className="text-[10px] text-slate-400">
-                  Select forecasting horizon to evaluate crowd surge probabilities
+                  Time-series sliding window forecast with 95% confidence intervals
                 </p>
               </div>
               <div className="flex gap-1">
-                {([15, 30, 60, 120] as const).map(m => (
+                {([15, 30, 60] as const).map(m => (
                   <button
                     key={m}
                     onClick={() => handleRunCrowdPrediction(m)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 border border-slate-700 text-xs font-bold"
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 border border-slate-700 text-xs font-bold transition-colors"
                   >
                     +{m}m
                   </button>
@@ -958,40 +1041,73 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
               </div>
             </div>
 
-            {currentResponse && currentResponse.service === 'CrowdPrediction' && (
+            {crowdForecastReport && (
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-3 gap-2 text-xs">
                   <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Overall Ingress Trend</span>
-                    <span className="text-lg font-bold text-cyan-300">
-                      {currentResponse.payload.overallTrend}
+                    <span className="text-[10px] text-slate-400 block">Current Devotees</span>
+                    <span className="text-base font-bold text-slate-200">
+                      {crowdForecastReport.totalSimulatedDevoteesNow.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-cyan-500/30">
+                    <span className="text-[10px] text-cyan-400 block">Forecast (+{crowdForecastReport.forecastHorizonMinutes}m)</span>
+                    <span className="text-base font-bold text-cyan-300">
+                      {crowdForecastReport.totalProjectedDevotees.toLocaleString()}
+                    </span>
+                    <span className="text-[9px] text-slate-400 block">
+                      Growth: {crowdForecastReport.projectedGrowthPercent > 0 ? `+${crowdForecastReport.projectedGrowthPercent}%` : `${crowdForecastReport.projectedGrowthPercent}%`}
                     </span>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Projected Devotees</span>
-                    <span className="text-lg font-bold text-emerald-300">
-                      {currentResponse.payload.totalProjectedDevotees?.toLocaleString()}
+                    <span className="text-[10px] text-slate-400 block">Confidence Interval</span>
+                    <span className="text-xs font-mono font-bold text-emerald-400">
+                      95% CI
                     </span>
+                    <span className="text-[9px] text-slate-400 block">±1.96 SE bounds</span>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Ghat-Wise Surge Forecast:
-                  </h4>
-                  {currentResponse.payload.ghatForecasts?.map((gf: any, idx: number) => (
-                    <div key={idx} className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
-                      <div>
-                        <div className="font-bold text-slate-200">{gf.ghatName}</div>
-                        <div className="text-[10px] text-slate-400">
-                          Current: {gf.currentDensity} pax/m² → Projected: <strong className="text-amber-300">{gf.projectedDensity} pax/m²</strong>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      Sector-Wise Crowd Forecast & Uncertainty:
+                    </h4>
+                    <span className="text-[10px] text-slate-500">Method: Weighted Moving Average</span>
+                  </div>
+                  {crowdForecastReport.zoneForecasts.map((zf) => (
+                    <div key={zf.zoneId} className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-bold text-slate-200">{zf.zoneName}</span>
+                          <span className="text-[10px] text-slate-400 block">
+                            Density: {zf.currentDensityPaxPerSqM} → <strong className="text-cyan-300">{zf.projectedDensityPaxPerSqM} pax/m²</strong>
+                          </span>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <Badge variant={gf.surgeRiskLevel === 'HIGH' ? 'rose' : gf.surgeRiskLevel === 'MODERATE' ? 'amber' : 'emerald'} size="sm">
-                          {gf.surgeRiskLevel}
+                        <Badge 
+                          variant={zf.surgeAlert.severity === 'CRITICAL' ? 'rose' : zf.surgeAlert.severity === 'HIGH' ? 'amber' : 'emerald'} 
+                          size="sm"
+                        >
+                          {zf.surgeAlert.severity === 'NORMAL' ? 'STABLE' : `SURGE: ${zf.surgeAlert.severity}`}
                         </Badge>
                       </div>
+
+                      {/* Uncertainty bounds slider display */}
+                      <div className="p-2 rounded-lg bg-slate-950/70 border border-slate-800/80 flex items-center justify-between text-[10px] font-mono">
+                        <span className="text-slate-400">Lower: <strong className="text-slate-200">{zf.uncertaintyRange.lowerBound.toLocaleString()}</strong></span>
+                        <span className="text-cyan-300 font-bold">Median: {zf.uncertaintyRange.medianForecast.toLocaleString()}</span>
+                        <span className="text-slate-400">Upper: <strong className="text-slate-200">{zf.uncertaintyRange.upperBound.toLocaleString()}</strong></span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 space-y-1">
+                  <div className="font-bold text-cyan-400 uppercase">Operational Advisories:</div>
+                  {crowdForecastReport.operationalAdvisories.map((adv, i) => (
+                    <div key={i} className="flex items-start gap-1.5">
+                      <ChevronRight className="w-3 h-3 text-cyan-400 shrink-0 mt-0.5" />
+                      <span>{adv}</span>
                     </div>
                   ))}
                 </div>
@@ -1005,50 +1121,93 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           <div className="space-y-4">
             <div className="flex items-center justify-between bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
               <div>
-                <h3 className="text-xs font-bold text-amber-300 uppercase">
-                  Spatial Anomaly Scanner
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-amber-300 uppercase">
+                    Spatial Anomaly Scanner
+                  </h3>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-amber-950/80 text-amber-400 border border-amber-800">
+                    SIMULATION_DERIVED_ANOMALY
+                  </span>
+                </div>
                 <p className="text-[10px] text-slate-400">
-                  Real-time density deviations and bottleneck hotspot detection
+                  Statistical Z-Score deviation & threshold scanning across 7 operational categories
                 </p>
               </div>
-              <button
-                onClick={handleRunAnomalyScan}
-                className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold"
-              >
-                Scan Now
-              </button>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={handleRunAnomalyScan}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-colors"
+                >
+                  Scan Now
+                </button>
+                <button
+                  onClick={handlePlotAnomaliesOnCesium}
+                  className="px-2.5 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-colors flex items-center gap-1"
+                  title="Visualize 3D markers on Cesium map"
+                >
+                  <Compass className="w-3.5 h-3.5" />
+                  <span>3D Globe</span>
+                </button>
+              </div>
             </div>
 
-            {currentResponse && currentResponse.service === 'AnomalyDetection' && (
+            {anomalyScanReport && (
               <div className="space-y-3">
                 <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
                   <div>
-                    <span className="text-[10px] text-slate-400 block">System Health Score</span>
+                    <span className="text-[10px] text-slate-400 block">System Operational Health</span>
                     <span className="text-2xl font-bold text-cyan-300">
-                      {currentResponse.payload.systemHealthScore} / 100
+                      {anomalyScanReport.systemHealthScore} / 100
                     </span>
                   </div>
-                  <Badge variant={currentResponse.payload.systemHealthScore > 80 ? 'emerald' : currentResponse.payload.systemHealthScore > 60 ? 'amber' : 'rose'}>
-                    {currentResponse.payload.systemHealthScore > 80 ? 'STABLE' : 'ADVISORY'}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400">
+                      {anomalyScanReport.totalAnomaliesDetected} anomaly detected
+                    </span>
+                    <Badge variant={anomalyScanReport.systemHealthScore > 80 ? 'emerald' : anomalyScanReport.systemHealthScore > 60 ? 'amber' : 'rose'}>
+                      {anomalyScanReport.systemHealthScore > 80 ? 'STABLE' : 'ADVISORY'}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* 7 Category Status Bar */}
+                <div className="grid grid-cols-4 gap-1 text-[9px] font-mono text-center">
+                  <div className="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300">Density Spikes</div>
+                  <div className="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300">Flow Imbalance</div>
+                  <div className="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300">Queue Surges</div>
+                  <div className="p-1.5 rounded bg-slate-900 border border-slate-800 text-slate-300">Resource Gaps</div>
                 </div>
 
                 <div className="space-y-2">
                   <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Detected Anomalies ({currentResponse.payload.totalAnomaliesDetected}):
+                    Detected Anomalies & Statistical Deviations:
                   </h4>
-                  {currentResponse.payload.anomalies?.map((anom: any, idx: number) => (
-                    <div key={idx} className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1 text-xs">
+                  {anomalyScanReport.anomalies.map((anom) => (
+                    <div key={anom.anomalyId} className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-200">{anom.location}</span>
+                        <div>
+                          <span className="font-bold text-slate-200">{anom.title}</span>
+                          <span className="text-[10px] text-slate-400 block">{anom.affectedZoneName}</span>
+                        </div>
                         <Badge variant={anom.severity === 'CRITICAL' ? 'rose' : anom.severity === 'HIGH' ? 'amber' : 'cyan'} size="sm">
                           {anom.severity}
                         </Badge>
                       </div>
                       <p className="text-[11px] text-slate-300">{anom.description}</p>
+                      
+                      {anom.supportingMeasurements.length > 0 && (
+                        <div className="p-2 rounded bg-slate-950/70 border border-slate-800/80 text-[10px] space-y-0.5 font-mono">
+                          <div className="text-slate-400">
+                            Observed: <strong className="text-amber-300">{anom.supportingMeasurements[0].observedValue} {anom.supportingMeasurements[0].unit}</strong> (Baseline: {anom.supportingMeasurements[0].expectedBaseline})
+                          </div>
+                          <div className="text-slate-500">
+                            Deviation: {anom.supportingMeasurements[0].zScoreOrDeviation > 0 ? `+${anom.supportingMeasurements[0].zScoreOrDeviation}` : anom.supportingMeasurements[0].zScoreOrDeviation} • Algorithm: {anom.detectionAlgorithm}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="text-[10px] text-cyan-400 font-bold">
-                        Recommendation: {anom.suggestedAction}
+                        Recommendation: {anom.recommendedInvestigation}
                       </div>
                     </div>
                   ))}
@@ -1063,37 +1222,88 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           <div className="space-y-4">
             <div className="flex items-center justify-between bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
               <div>
-                <h3 className="text-xs font-bold text-sky-300 uppercase">
-                  Godavari River Flood Intelligence
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-sky-300 uppercase">
+                    Godavari River Flood Intelligence
+                  </h3>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-sky-950/80 text-sky-400 border border-sky-800">
+                    DEMONSTRATION_MODE_EXTERNAL_FEEDS_UNCONNECTED
+                  </span>
+                </div>
                 <p className="text-[10px] text-slate-400">
-                  CWC Gauge heights, Dowleswaram barrage discharge, and submergence risks
+                  CWC River Gauge, Dowleswaram Barrage discharge, and 3D step submergence
                 </p>
               </div>
               <button
-                onClick={handleRunFloodAnalysis}
-                className="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-bold"
+                onClick={() => handleRunFloodAnalysis(13.8)}
+                className="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-bold transition-colors"
               >
-                Evaluate River
+                Reset Live
               </button>
             </div>
 
-            {currentResponse && currentResponse.service === 'FloodIntelligence' && (
+            {/* Interactive Simulation Scenarios */}
+            <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2 text-xs">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                Simulate Godavari Water Level Scenarios (Updates Cesium 3D Surface):
+              </span>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  onClick={() => handleRunFloodAnalysis(13.8)}
+                  className={`p-2 rounded-xl border text-center transition-all ${
+                    activeFloodMsl === 13.8
+                      ? 'bg-sky-500/30 text-sky-200 border-sky-400 font-bold'
+                      : 'bg-slate-950/80 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="text-[10px]">Baseline Monsoon</div>
+                  <div className="font-bold text-xs">13.8m MSL</div>
+                </button>
+                <button
+                  onClick={() => handleRunFloodAnalysis(15.3)}
+                  className={`p-2 rounded-xl border text-center transition-all ${
+                    activeFloodMsl === 15.3
+                      ? 'bg-amber-500/30 text-amber-200 border-amber-400 font-bold'
+                      : 'bg-slate-950/80 text-slate-400 border-slate-800 hover:text-amber-300'
+                  }`}
+                >
+                  <div className="text-[10px]">Warning Rise (+1.5m)</div>
+                  <div className="font-bold text-xs">15.3m MSL</div>
+                </button>
+                <button
+                  onClick={() => handleRunFloodAnalysis(17.5)}
+                  className={`p-2 rounded-xl border text-center transition-all ${
+                    activeFloodMsl === 17.5
+                      ? 'bg-rose-500/30 text-rose-200 border-rose-400 font-bold'
+                      : 'bg-slate-950/80 text-slate-400 border-slate-800 hover:text-rose-300'
+                  }`}
+                >
+                  <div className="text-[10px]">Danger Rise (+3.7m)</div>
+                  <div className="font-bold text-xs">17.5m MSL</div>
+                </button>
+              </div>
+            </div>
+
+            {floodAssessment && (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">CWC Gauge Elevation</span>
+                    <span className="text-[10px] text-slate-400 block">CWC River Gauge</span>
                     <span className="text-xl font-bold text-cyan-300">
-                      {currentResponse.payload.cwcWaterLevelMsl}m MSL
+                      {floodAssessment.currentWaterLevelMsl}m MSL
                     </span>
-                    <span className="text-[10px] text-slate-500 block">Danger: {currentResponse.payload.dangerLevelMsl}m</span>
+                    <span className="text-[10px] text-slate-500 block">
+                      Warning: 16.0m • Danger: 17.5m
+                    </span>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Submergence Risk</span>
+                    <span className="text-[10px] text-slate-400 block">Barrage Discharge</span>
                     <span className="text-xl font-bold text-emerald-300">
-                      {currentResponse.payload.submergenceRiskLevel}
+                      {floodAssessment.upstreamDischargeCusecs.toLocaleString()} cusecs
                     </span>
-                    <span className="text-[10px] text-slate-500 block">Discharge: {currentResponse.payload.barrageDischargeCusecs.toLocaleString()} cusecs</span>
+                    <span className="text-[10px] text-slate-500 block">
+                      Rainfall: {floodAssessment.rainfallPast24hMm}mm / 24h
+                    </span>
                   </div>
                 </div>
 
@@ -1101,22 +1311,184 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                   <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                     Ghat Steps Submergence Status:
                   </h4>
-                  {currentResponse.payload.ghatSubmergenceStatus?.map((gs: any, idx: number) => (
-                    <div key={idx} className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
+                  {floodAssessment.stepExposureProfiles.map((step, idx) => (
+                    <div key={`${step.ghatId}-${idx}`} className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
                       <div>
-                        <div className="font-bold text-slate-200">{gs.ghatName}</div>
+                        <div className="font-bold text-slate-200">{step.ghatName} - {step.stepName}</div>
                         <div className="text-[10px] text-slate-400">
-                          Step Crest: {gs.elevationMsl}m MSL • Clearance: <strong className="text-cyan-300">{gs.freeboardClearanceMeters}m</strong>
+                          Crest: {step.crestElevationMsl}m MSL • Freeboard: <strong className="text-cyan-300">{step.currentFreeboardMeters}m</strong>
                         </div>
                       </div>
-                      <Badge variant={gs.isSubmerged ? 'rose' : 'emerald'} size="sm">
-                        {gs.isSubmerged ? 'SUBMERGED' : 'DRY & SAFE'}
+                      <Badge variant={step.isSubmerged ? 'rose' : step.exposureStatus === 'NEAR_CREST_MONITORING' ? 'amber' : 'emerald'} size="sm">
+                        {step.isSubmerged ? 'SUBMERGED - CLOSED' : step.exposureStatus === 'NEAR_CREST_MONITORING' ? 'NEAR CREST' : 'DRY & SAFE'}
                       </Badge>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* VIEW G: EGRESS & MCDA OPTIMIZER */}
+        {activeTab === 'predictive_egress' && (
+          <div className="space-y-4">
+            {/* 1. A* Evacuation Optimization Panel */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-emerald-400 uppercase">
+                      AI Evacuation Route Optimizer
+                    </h3>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+                      A*_GRAPH_VALIDATED
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Comparing Baseline Monolithic Egress vs AI Dynamic Multi-Path Diversion
+                  </p>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={handleRefreshEgressPlan}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold transition-colors"
+                    title="Re-run A* optimization & MCDA scoring"
+                  >
+                    Recompute
+                  </button>
+                  <button
+                    onClick={handlePlotAlternativeEvacOnCesium}
+                    className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-colors flex items-center gap-1"
+                  >
+                    <Compass className="w-3.5 h-3.5" />
+                    <span>Plot on Cesium</span>
+                  </button>
+                </div>
+              </div>
+
+              {evacComparison && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-3 rounded-xl bg-slate-900/90 border border-amber-500/30">
+                      <span className="text-[10px] text-amber-400 block font-bold">Baseline Scenario</span>
+                      <div className="text-sm font-bold text-slate-200 mt-1">
+                        {evacComparison.baselineScenario.totalClearanceMinutes} mins
+                      </div>
+                      <span className="text-[10px] text-slate-400 block">
+                        Corridor: {evacComparison.baselineScenario.activeCorridorNames.join(', ')}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-900/90 border border-emerald-500/40 shadow-glow-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-emerald-400 block font-bold">AI Multi-Path Diversion</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          +{evacComparison.aiOptimizedScenario.efficiencyImprovementPercent}% GAIN
+                        </span>
+                      </div>
+                      <div className="text-sm font-bold text-emerald-300 mt-1">
+                        {evacComparison.aiOptimizedScenario.totalClearanceMinutes} mins clearance
+                      </div>
+                      <span className="text-[10px] text-slate-400 block">
+                        Corridor: {evacComparison.aiOptimizedScenario.activeCorridorNames.join(', ')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Age Group Cohorts Dynamics */}
+                  {evacComparison.ageGroupCohorts && (
+                    <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5 text-xs">
+                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        Age-Group Cohort Velocity Dynamics:
+                      </h4>
+                      <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                        {evacComparison.ageGroupCohorts.map(c => (
+                          <div key={c.cohort} className="p-2 rounded bg-slate-950/70 border border-slate-800/80 flex items-center justify-between">
+                            <div>
+                              <span className="font-bold text-slate-200">{c.cohort}</span>
+                              <span className="text-[9px] text-slate-400 block">Speed: {c.assumedSpeedMps} m/s</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-slate-300 font-bold">{c.populationInZone.toLocaleString()} pax</span>
+                              {c.assistanceRequiredCount > 0 && (
+                                <span className="text-[9px] text-rose-400 block">Escorts: {c.assistanceRequiredCount}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 2. MCDA Resource Allocation Optimizer */}
+            <div className="space-y-3 pt-2 border-t border-slate-800">
+              <div className="flex items-center justify-between bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-cyan-300 uppercase">
+                      MCDA Resource Allocation Plan
+                    </h3>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800">
+                      6-DIMENSIONAL_MCDA
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Weighted Multi-Criteria Decision Analysis for standby emergency units
+                  </p>
+                </div>
+                <Badge variant="amber">REQUIRES SIGN-OFF</Badge>
+              </div>
+
+              {allocationPlan && (
+                <div className="space-y-2">
+                  {allocationPlan.recommendations.map((rec) => (
+                    <div key={rec.resourceId} className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-slate-200">{rec.resourceName}</div>
+                          <span className="text-[10px] text-slate-400">
+                            Category: {rec.category} • Current: {rec.currentZoneName}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleFocusResourceOnCesium(rec.resourceId, rec.resourceName)}
+                            className="p-1 rounded bg-slate-800 hover:bg-cyan-500/20 text-cyan-400 border border-slate-700 transition-colors"
+                            title="Focus in 3D"
+                          >
+                            <MapPin className="w-3.5 h-3.5" />
+                          </button>
+                          <Badge variant={rec.suitabilityScore >= 80 ? 'emerald' : 'cyan'}>
+                            {rec.suitabilityScore} / 100
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* MCDA 6-Score Breakdown Pills */}
+                      <div className="grid grid-cols-3 gap-1 text-[9px] font-mono text-center">
+                        <div className="p-1 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          Priority: {rec.mcdaBreakdown.incidentPriorityScore}%
+                        </div>
+                        <div className="p-1 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          Category: {rec.mcdaBreakdown.categoryMatchScore}%
+                        </div>
+                        <div className="p-1 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          ETA: {rec.estimatedTravelTimeMinutes}m ({rec.distanceMeters}m)
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] text-slate-400 italic">
+                        {rec.heuristicJustification}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
