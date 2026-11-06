@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TopHeader } from './TopHeader';
-import { Sidebar } from './Sidebar';
+import { GooeyLiquidNav } from '../navigation/GooeyLiquidNav';
 import { StatusCards } from './StatusCards';
 import { CesiumViewer } from '../cesium/CesiumViewer';
 import { LayerControls } from '../cesium/LayerControls';
@@ -15,7 +15,7 @@ import { EmergencyCommandCenter } from '../emergency/EmergencyCommandCenter';
 import { AgentInspectorModal } from '../emergency/AgentInspectorModal';
 import { EmergencyScenarioBuilder } from '../emergency/EmergencyScenarioBuilder';
 import { GisValidationModal } from '../panels/GisValidationModal';
-import { EventOperationsCommandCenter } from '../operations/EventOperationsCommandCenter';
+import { EventOperationsCommandCenter, TabType as OperationsTabType } from '../operations/EventOperationsCommandCenter';
 import { ResourceInspectorModal } from '../operations/ResourceInspectorModal';
 import { EventResource } from '../../types/operations';
 import { 
@@ -39,7 +39,14 @@ import { useSimulationTime } from '../../hooks/useSimulationTime';
 export const DashboardLayout: React.FC = () => {
   // Mobile & Layout Navigation States
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('nav') === 'expanded') return false;
+      if (params.get('nav') === 'collapsed') return true;
+    }
+    return true; // Default to sleek compact gooey dock
+  });
   const [isLayersPanelOpen, setIsLayersPanelOpen] = useState<boolean>(false);
 
   // Active Module & Modal Inspector
@@ -70,6 +77,7 @@ export const DashboardLayout: React.FC = () => {
     }
     return false;
   });
+  const [operationsInitialTab, setOperationsInitialTab] = useState<OperationsTabType>('overview');
   const [selectedResourceForInspection, setSelectedResourceForInspection] = useState<EventResource | null>(null);
 
   // Selected GIS Location (Pushkar Ghat selected by default for Day 1 discovery)
@@ -267,22 +275,27 @@ export const DashboardLayout: React.FC = () => {
         isGisValidationOpen={isGisValidationOpen}
       />
 
-      {/* Main Body: Sidebar + Cesium Map Viewport */}
+      {/* Main Body: Gooey Liquid Navigation + Full-Screen Cesium Map Viewport */}
       <div className="relative flex-1 w-full h-[calc(100vh-4rem)] flex overflow-hidden">
-        {/* 2. Left Sidebar Navigation */}
-        <Sidebar
+        {/* 2. Floating Gooey Liquid Navigation Dock & Expandable Matrix */}
+        <GooeyLiquidNav
           activeModule={activeModuleId}
           onSelectModule={handleSelectModule}
           isOpenMobile={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
+          onOpenOperationsTab={(tab) => {
+            setOperationsInitialTab(tab);
+            setIsOperationsCommandCenterOpen(true);
+            setActiveModuleId('event_ops');
+          }}
+          onOpenScenarioModal={() => setIsScenarioModalOpen(true)}
+          onOpenGisValidation={() => setIsGisValidationOpen(true)}
         />
 
         {/* 3. Main Full-Screen Cesium Globe Viewport */}
-        <main className={`relative flex-1 h-full transition-all duration-300 ${
-          isSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-72'
-        }`}>
+        <main className="relative flex-1 w-full h-full">
           {/* Cesium 3D Globe Viewer */}
           <CesiumViewer
             layers={layers}
@@ -375,6 +388,7 @@ export const DashboardLayout: React.FC = () => {
           {/* Day 4 Intelligent Event Operations Command Center */}
           <EventOperationsCommandCenter
             isOpen={isOperationsCommandCenterOpen}
+            initialTab={operationsInitialTab}
             onClose={() => setIsOperationsCommandCenterOpen(false)}
             onInspectResource={(res) => setSelectedResourceForInspection(res)}
             onFlyToZone={(zoneId) => cesiumService.flyToZone(zoneId)}

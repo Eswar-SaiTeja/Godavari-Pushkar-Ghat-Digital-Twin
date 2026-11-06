@@ -23,7 +23,7 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
   const [isExpanded, setIsExpanded] = React.useState<boolean>(true);
 
   return (
-    <div className="absolute top-20 left-4 z-10 select-none hidden md:block">
+    <div className="absolute top-20 left-[76px] z-10 select-none hidden md:block transition-all duration-300">
       {/* Toggle header */}
       <button
         onClick={() => setIsExpanded(prev => !prev)}

@@ -51,7 +51,10 @@ interface EventOperationsCommandCenterProps {
   onInspectResource?: (resource: EventResource) => void;
   onFlyToZone?: (zoneId: string) => void;
   onFlyToResource?: (resourceId: string) => void;
+  initialTab?: TabType;
 }
+
+export type { TabType };
 
 type TabType = 
   | 'overview' 
@@ -70,8 +73,10 @@ export const EventOperationsCommandCenter: React.FC<EventOperationsCommandCenter
   onInspectResource,
   onFlyToZone,
   onFlyToResource,
+  initialTab,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>(() => {
+    if (initialTab) return initialTab;
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const ops = params.get('ops');
@@ -81,6 +86,12 @@ export const EventOperationsCommandCenter: React.FC<EventOperationsCommandCenter
     }
     return 'overview';
   });
+
+  useEffect(() => {
+    if (initialTab && isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, isOpen]);
   const [metrics, setMetrics] = useState<OperationsCommandMetrics>(eventOperationsEngine.getOperationsMetrics());
   const [resources, setResources] = useState<EventResource[]>(eventOperationsEngine.getResources());
   const [zones, setZones] = useState<OperationalZone[]>(eventOperationsEngine.getZones());
