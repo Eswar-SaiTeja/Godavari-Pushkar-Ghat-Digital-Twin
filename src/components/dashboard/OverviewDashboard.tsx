@@ -568,19 +568,35 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         </div>
 
         {/* AI Situational Briefing Banner */}
-        <div className="p-3 rounded-xl bg-purple-950/30 border border-purple-500/20 text-xs font-mono flex items-center justify-between">
+        <div className="p-3 rounded-xl bg-purple-950/30 border border-purple-500/20 text-xs font-mono flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
             <span className="text-purple-200">
               <strong>JARVIS Copilot:</strong> Devotee ingress remains steady along Main Bazaar Road. Flow imbalance at Pushkar Chowk Ingress monitored. Egress corridor to Municipal Stadium is fully cleared.
             </span>
           </div>
-          <button
-            onClick={() => onOpenAICopilot('chat')}
-            className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-400/30 text-[11px] font-bold shrink-0 ml-2"
-          >
-            Ask JARVIS →
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+            <button
+              onClick={() => onOpenAICopilot('reports')}
+              className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/30 text-[11px] font-bold"
+              title="Generate Operational SITREP Report"
+            >
+              Operations SITREP →
+            </button>
+            <button
+              onClick={() => onOpenAICopilot('announcements')}
+              className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold"
+              title="Open Multilingual PA Generator"
+            >
+              PA Broadcast →
+            </button>
+            <button
+              onClick={() => onOpenAICopilot('chat')}
+              className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-400/30 text-[11px] font-bold"
+            >
+              Ask JARVIS →
+            </button>
+          </div>
         </div>
       </div>
 

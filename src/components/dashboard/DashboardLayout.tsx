@@ -17,7 +17,7 @@ import { EmergencyScenarioBuilder } from '../emergency/EmergencyScenarioBuilder'
 import { GisValidationModal } from '../panels/GisValidationModal';
 import { EventOperationsCommandCenter, TabType as OperationsTabType } from '../operations/EventOperationsCommandCenter';
 import { ResourceInspectorModal } from '../operations/ResourceInspectorModal';
-import { AICopilotDrawer } from '../ai/AICopilotDrawer';
+import { AICopilotDrawer, AICopilotTab } from '../ai/AICopilotDrawer';
 import { OverviewDashboard } from './OverviewDashboard';
 import { GooeyModuleId } from '../navigation/TopGooeyTaskbar';
 import { EventResource } from '../../types/operations';
@@ -91,7 +91,7 @@ export const DashboardLayout: React.FC = () => {
     }
     return false;
   });
-  const [aiCopilotTab, setAiCopilotTab] = useState<'chat' | 'predictions' | 'anomalies' | 'flood' | 'approvals' | 'audit'>('chat');
+  const [aiCopilotTab, setAiCopilotTab] = useState<AICopilotTab>('chat');
   const [activeGooeyModule, setActiveGooeyModule] = useState<GooeyModuleId>('overview');
   const [currentViewMode, setCurrentViewMode] = useState<'OVERVIEW' | '3D_MAP'>('OVERVIEW');
 
@@ -383,7 +383,7 @@ export const DashboardLayout: React.FC = () => {
           onOpenScenarioModal={() => setIsScenarioModalOpen(true)}
           onOpenGisValidation={() => setIsGisValidationOpen(true)}
           onOpenAICopilot={(tab) => {
-            setAiCopilotTab(tab || 'chat');
+            setAiCopilotTab((tab as any) || 'chat');
             setIsAICopilotOpen(true);
           }}
         />

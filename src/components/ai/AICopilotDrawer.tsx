@@ -32,8 +32,13 @@ import {
   ChevronRight,
   Radio,
   Zap,
-  Activity
+  Activity,
+  Megaphone,
+  GitFork
 } from 'lucide-react';
+import { AIModuleStatusBar } from './AIModuleStatusBar';
+import { AIOperationsReportsView } from './AIOperationsReportsView';
+import { MultilingualAnnouncementsView } from './MultilingualAnnouncementsView';
 import { Badge } from '../common/Badge';
 import { crowdPredictionService } from '../../ai/services/crowdPredictionService';
 import { anomalyDetectionService } from '../../ai/services/anomalyDetectionService';
@@ -70,10 +75,23 @@ import {
   DataClassification 
 } from '../../ai/types/ai';
 
+export type AICopilotTab = 
+  | 'chat' 
+  | 'predictions' 
+  | 'anomalies' 
+  | 'resources' 
+  | 'evacuation' 
+  | 'flood' 
+  | 'reports' 
+  | 'announcements' 
+  | 'approvals' 
+  | 'audit' 
+  | 'predictive_egress';
+
 export interface AICopilotDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'chat' | 'predictions' | 'anomalies' | 'flood' | 'approvals' | 'audit' | 'predictive_egress';
+  initialTab?: AICopilotTab;
   onNavigateToModule?: (
     module: 'OPERATIONS' | 'DISPATCH' | 'ANALYTICS' | 'CROWD' | 'EMERGENCY' | 'GIS_AUDIT' | 'SCENARIO' | 'EVACUATION', 
     tab?: string
@@ -86,7 +104,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   initialTab = 'chat',
   onNavigateToModule
 }) => {
-  const [activeTab, setActiveTab] = useState<'chat' | 'predictions' | 'anomalies' | 'flood' | 'approvals' | 'audit' | 'predictive_egress'>(initialTab);
+  const [activeTab, setActiveTab] = useState<AICopilotTab>(initialTab);
   const [prompt, setPrompt] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState<JarvisLanguage>('en');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -638,7 +656,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   const pendingApprovals = auditLogs.filter(l => l.requiresHumanApproval && l.approvalStatus === 'PENDING');
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-slate-950/95 backdrop-blur-xl border-l border-cyan-500/30 shadow-2xl flex flex-col font-mono text-slate-200 transition-all duration-300">
+    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl bg-slate-950/95 backdrop-blur-xl border-l border-cyan-500/30 shadow-2xl flex flex-col font-mono text-slate-200 transition-all duration-300">
       {/* 1. Header Bar: JARVIS Command Center */}
       <div className="p-4 border-b border-cyan-500/20 bg-slate-900/90 flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-2.5">
@@ -726,14 +744,45 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
         </div>
       </div>
 
-      {/* 2. Sub-Navigation Tabs */}
+      {/* 2. Top AI Module Integration Status Bar (Module 5) */}
+      <AIModuleStatusBar
+        activeModuleId={
+          activeTab === 'chat' ? 'ai_copilot' :
+          activeTab === 'predictions' ? 'crowd_predictions' :
+          activeTab === 'anomalies' ? 'anomaly_detection' :
+          activeTab === 'resources' ? 'resource_recommendations' :
+          activeTab === 'evacuation' ? 'evacuation_optimization' :
+          activeTab === 'flood' ? 'flood_intelligence' :
+          activeTab === 'reports' ? 'operations_reports' :
+          activeTab === 'announcements' ? 'public_announcements' :
+          activeTab === 'predictive_egress' ? 'evacuation_optimization' :
+          undefined
+        }
+        onSelectModule={(modId) => {
+          switch (modId) {
+            case 'ai_copilot': setActiveTab('chat'); break;
+            case 'crowd_predictions': setActiveTab('predictions'); break;
+            case 'anomaly_detection': setActiveTab('anomalies'); break;
+            case 'resource_recommendations': setActiveTab('resources'); break;
+            case 'evacuation_optimization': setActiveTab('evacuation'); break;
+            case 'flood_intelligence': setActiveTab('flood'); break;
+            case 'operations_reports': setActiveTab('reports'); break;
+            case 'public_announcements': setActiveTab('announcements'); break;
+          }
+        }}
+      />
+
+      {/* 3. Sub-Navigation Tabs */}
       <div className="px-4 py-2 border-b border-slate-800 bg-slate-950/80 flex items-center gap-1.5 overflow-x-auto text-xs shrink-0 custom-scrollbar">
         {[
-          { key: 'chat', label: 'Command Chat', icon: Sparkles },
+          { key: 'chat', label: 'Command Copilot', icon: Sparkles },
           { key: 'predictions', label: 'Crowd Forecast', icon: Users },
           { key: 'anomalies', label: 'Anomaly Scan', icon: AlertTriangle },
+          { key: 'resources', label: 'MCDA Resources', icon: Zap },
+          { key: 'evacuation', label: 'Evacuation A*', icon: GitFork },
           { key: 'flood', label: 'Godavari Flood', icon: Waves },
-          { key: 'predictive_egress', label: 'Egress & MCDA', icon: Zap },
+          { key: 'reports', label: 'Operations Reports', icon: FileText },
+          { key: 'announcements', label: 'PA Announcements', icon: Megaphone },
           { 
             key: 'approvals', 
             label: `Human Approvals (${pendingApprovals.length})`, 
@@ -743,7 +792,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           { key: 'audit', label: 'Audit Trail', icon: FileText },
         ].map((tab) => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.key;
+          const isActive = activeTab === tab.key || (tab.key === 'evacuation' && activeTab === 'predictive_egress');
           return (
             <button
               key={tab.key}
@@ -1330,8 +1379,8 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           </div>
         )}
 
-        {/* VIEW G: EGRESS & MCDA OPTIMIZER */}
-        {activeTab === 'predictive_egress' && (
+        {/* VIEW G1: EVACUATION OPTIMIZATION (MODULE 5) */}
+        {(activeTab === 'evacuation' || activeTab === 'predictive_egress') && (
           <div className="space-y-4">
             {/* 1. A* Evacuation Optimization Panel */}
             <div className="space-y-3">
@@ -1423,9 +1472,13 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        )}
 
-            {/* 2. MCDA Resource Allocation Optimizer */}
-            <div className="space-y-3 pt-2 border-t border-slate-800">
+        {/* VIEW G2: MCDA RESOURCE ALLOCATION OPTIMIZER (MODULE 5) */}
+        {(activeTab === 'resources' || activeTab === 'predictive_egress') && (
+          <div className="space-y-4">
+            <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
                 <div>
                   <div className="flex items-center gap-2">
@@ -1489,6 +1542,20 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* VIEW H: AI OPERATIONS REPORTS GENERATOR (MODULE 1, 3, 4) */}
+        {activeTab === 'reports' && (
+          <div className="h-full -m-4">
+            <AIOperationsReportsView userRole={userRole} userId={currentUser.userId} />
+          </div>
+        )}
+
+        {/* VIEW I: MULTILINGUAL PUBLIC ANNOUNCEMENTS (MODULE 2) */}
+        {activeTab === 'announcements' && (
+          <div className="h-full -m-4">
+            <MultilingualAnnouncementsView userRole={userRole} userId={currentUser.userId} />
           </div>
         )}
 
