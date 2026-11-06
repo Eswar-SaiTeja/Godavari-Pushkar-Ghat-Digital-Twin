@@ -20,7 +20,8 @@ import {
   ChevronRight, 
   ChevronDown,
   Minimize2,
-  LayoutGrid
+  LayoutGrid,
+  Sparkles
 } from 'lucide-react';
 import { hudPositionManager } from '../../services/hudPositionManager';
 import { SIDEBAR_MODULES } from '../../config/modules';
@@ -36,6 +37,7 @@ export interface GooeyLiquidNavProps {
   onOpenOperationsTab?: (tab: 'overview' | 'resources' | 'zones' | 'dispatch' | 'medical' | 'facilities' | 'analytics' | 'logs' | 'admin') => void;
   onOpenScenarioModal?: () => void;
   onOpenGisValidation?: () => void;
+  onOpenAICopilot?: (tab?: 'chat' | 'predictions' | 'anomalies' | 'flood' | 'approvals' | 'audit') => void;
 }
 
 interface NavItem {
@@ -45,8 +47,8 @@ interface NavItem {
   subLabel?: string;
   icon: React.ReactNode;
   category: 'CORE_GIS' | 'SIMULATION' | 'OPERATIONS' | 'INTELLIGENCE';
-  status: 'ACTIVE' | 'SIMULATED' | 'DAY4' | 'CONFIG';
-  actionType: 'MODULE' | 'OPS_TAB' | 'SCENARIO_MODAL' | 'GIS_MODAL';
+  status: 'ACTIVE' | 'SIMULATED' | 'DAY4' | 'DAY5' | 'CONFIG';
+  actionType: 'MODULE' | 'OPS_TAB' | 'SCENARIO_MODAL' | 'GIS_MODAL' | 'AI_COPILOT';
   opsTab?: 'overview' | 'resources' | 'zones' | 'dispatch' | 'medical' | 'facilities' | 'analytics' | 'logs' | 'admin';
 }
 
@@ -60,6 +62,7 @@ export const GooeyLiquidNav: React.FC<GooeyLiquidNavProps> = ({
   onOpenOperationsTab,
   onOpenScenarioModal,
   onOpenGisValidation,
+  onOpenAICopilot,
 }) => {
   // Navigation State
   const [isExpanded, setIsExpanded] = useState<boolean>(!isCollapsed);
@@ -229,6 +232,16 @@ export const GooeyLiquidNav: React.FC<GooeyLiquidNavProps> = ({
 
     // 4. INTELLIGENCE & CONFIG
     {
+      id: 'nav_ai_copilot',
+      moduleId: 'live_monitoring',
+      label: 'AI Intelligence Copilot',
+      subLabel: 'Advisory Chat, SITREP & PA Broadcasts',
+      icon: <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />,
+      category: 'INTELLIGENCE',
+      status: 'DAY5',
+      actionType: 'AI_COPILOT',
+    },
+    {
       id: 'nav_ai_telemetry',
       moduleId: 'live_monitoring',
       label: 'AI Sensors & Telemetry',
@@ -319,6 +332,8 @@ export const GooeyLiquidNav: React.FC<GooeyLiquidNavProps> = ({
       if (onOpenScenarioModal) onOpenScenarioModal();
     } else if (item.actionType === 'GIS_MODAL') {
       if (onOpenGisValidation) onOpenGisValidation();
+    } else if (item.actionType === 'AI_COPILOT') {
+      if (onOpenAICopilot) onOpenAICopilot('chat');
     }
 
     if (isOpenMobile) {

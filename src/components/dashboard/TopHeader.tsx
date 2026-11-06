@@ -44,6 +44,8 @@ interface TopHeaderProps {
   isAgentInspectorOpen?: boolean;
   onToggleGisValidation?: () => void;
   isGisValidationOpen?: boolean;
+  onToggleAICopilot?: () => void;
+  isAICopilotOpen?: boolean;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -68,6 +70,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   isAgentInspectorOpen,
   onToggleGisValidation,
   isGisValidationOpen,
+  onToggleAICopilot,
+  isAICopilotOpen,
 }) => {
   const [isFullscreen, setIsFullscreen] = React.useState<boolean>(false);
 
@@ -219,6 +223,21 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5">
+          {onToggleAICopilot && (
+            <button
+              onClick={onToggleAICopilot}
+              className={`p-2 rounded-lg border text-xs flex items-center gap-1.5 transition-all ${
+                isAICopilotOpen 
+                  ? 'bg-purple-500/20 text-purple-300 border-purple-400/60 shadow-glow-sm' 
+                  : 'bg-slate-800/80 text-purple-300 border-purple-500/30 hover:bg-purple-950/40 hover:border-purple-400/60'
+              }`}
+              title="Toggle Day 5 AI Intelligence Copilot"
+            >
+              <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
+              <span className="hidden lg:inline font-mono font-semibold">AI Copilot</span>
+            </button>
+          )}
+
           {onToggleOperationsCommandCenter && (
             <button
               onClick={onToggleOperationsCommandCenter}

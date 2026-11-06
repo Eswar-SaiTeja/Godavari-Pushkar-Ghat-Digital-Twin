@@ -17,6 +17,7 @@ import { EmergencyScenarioBuilder } from '../emergency/EmergencyScenarioBuilder'
 import { GisValidationModal } from '../panels/GisValidationModal';
 import { EventOperationsCommandCenter, TabType as OperationsTabType } from '../operations/EventOperationsCommandCenter';
 import { ResourceInspectorModal } from '../operations/ResourceInspectorModal';
+import { AICopilotDrawer } from '../ai/AICopilotDrawer';
 import { EventResource } from '../../types/operations';
 import { 
   LayerVisibilityState, 
@@ -79,6 +80,16 @@ export const DashboardLayout: React.FC = () => {
   });
   const [operationsInitialTab, setOperationsInitialTab] = useState<OperationsTabType>('overview');
   const [selectedResourceForInspection, setSelectedResourceForInspection] = useState<EventResource | null>(null);
+
+  // Day 5 AI Intelligence Foundation Copilot States
+  const [isAICopilotOpen, setIsAICopilotOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('ai') === 'open';
+    }
+    return false;
+  });
+  const [aiCopilotTab, setAiCopilotTab] = useState<'chat' | 'predictions' | 'anomalies' | 'flood' | 'approvals' | 'audit'>('chat');
 
   // Selected GIS Location (Pushkar Ghat selected by default for Day 1 discovery)
   const [selectedLocation, setSelectedLocation] = useState<GhatLocation | null>(GHAT_LOCATIONS[0]);
@@ -273,6 +284,8 @@ export const DashboardLayout: React.FC = () => {
         isAgentInspectorOpen={isAgentInspectorOpen}
         onToggleGisValidation={() => setIsGisValidationOpen(prev => !prev)}
         isGisValidationOpen={isGisValidationOpen}
+        onToggleAICopilot={() => setIsAICopilotOpen(prev => !prev)}
+        isAICopilotOpen={isAICopilotOpen}
       />
 
       {/* Main Body: Gooey Liquid Navigation + Full-Screen Cesium Map Viewport */}
@@ -292,6 +305,10 @@ export const DashboardLayout: React.FC = () => {
           }}
           onOpenScenarioModal={() => setIsScenarioModalOpen(true)}
           onOpenGisValidation={() => setIsGisValidationOpen(true)}
+          onOpenAICopilot={(tab) => {
+            setAiCopilotTab(tab || 'chat');
+            setIsAICopilotOpen(true);
+          }}
         />
 
         {/* 3. Main Full-Screen Cesium Globe Viewport */}
@@ -431,6 +448,13 @@ export const DashboardLayout: React.FC = () => {
             isOpen={isGisValidationOpen}
             onClose={() => setIsGisValidationOpen(false)}
             onSelectLocation={setSelectedLocation}
+          />
+
+          {/* Day 5 AI Intelligence Copilot Drawer */}
+          <AICopilotDrawer
+            isOpen={isAICopilotOpen}
+            onClose={() => setIsAICopilotOpen(false)}
+            initialTab={aiCopilotTab}
           />
         </main>
       </div>
