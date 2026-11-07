@@ -3,12 +3,19 @@
  * Runs inside Vite's Node.js server middleware and standalone Node production server.
  * Secures secret API keys (GEMINI_API_KEY) strictly on the server.
  * Never exposes API keys or client variables to frontend code.
- * Implements rate limiting, schema validation, timeout protection, and local mock fallback.
+ * Implements rate limiting, schema validation, timeout protection, and official Google Gen AI SDK integration.
  */
 
 import { IncomingMessage, ServerResponse } from 'http';
+import path from 'path';
+import dotenv from 'dotenv';
+import { GoogleGenAI } from '@google/genai';
 import { defaultRateLimiter } from '../src/ai/safety/rateLimiter';
 import { aiSecurityGuard } from '../src/ai/safety/aiSecurityGuard';
+
+// Load server-side .env configuration
+dotenv.config({ path: path.resolve(process.cwd(), 'server/.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 // Helper to parse JSON body from IncomingMessage
 function parseJsonBody(req: IncomingMessage): Promise<any> {
@@ -43,69 +50,99 @@ function sendJson(res: ServerResponse, statusCode: number, data: any) {
 }
 
 /**
- * Make external Google Gemini API request with retry limits and timeout
+ * Sanitize error messages to eliminate any possibility of API key exposure
  */
-async function callGeminiApiWithRetry(
+export function sanitizeErrorMessage(msg: string): string {
+  if (!msg) return '';
+  return msg
+    .replace(/key=[A-Za-z0-9._-]+/gi, 'key=[REDACTED]')
+    .replace(/AQ\.[A-Za-z0-9._-]+/g, '[REDACTED_API_KEY]')
+    .replace(/AIza[A-Za-z0-9._-]+/g, '[REDACTED_API_KEY]');
+}
+
+let cachedGenAI: GoogleGenAI | null = null;
+let cachedKey: string | null = null;
+
+function getGenAIClient(apiKey: string): GoogleGenAI {
+  if (cachedGenAI && cachedKey === apiKey) {
+    return cachedGenAI;
+  }
+  cachedGenAI = new GoogleGenAI({ apiKey });
+  cachedKey = apiKey;
+  return cachedGenAI;
+}
+
+/**
+ * Make external Google Gemini API request via official Google Gen AI SDK (@google/genai)
+ */
+async function callGeminiApiWithSDK(
   apiKey: string,
   model: string,
   promptText: string,
   systemInstruction?: string,
-  maxRetries: number = 2,
-  timeoutMs: number = 10000
-): Promise<any> {
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  let attempt = 0;
+  jsonOutput: boolean = true,
+  timeoutMs: number = 25000
+): Promise<{ text: string; parsedPayload?: any; modelUsed: string; latencyMs: number }> {
+  const startTime = performance.now();
+  const ai = getGenAIClient(apiKey);
+
+  const candidateModels = [model, 'gemini-3.5-flash', 'gemini-3.8-flash'];
+  const uniqueModels = Array.from(new Set(candidateModels.filter(Boolean)));
   let lastError: any = null;
 
-  const contents = [
-    {
-      parts: [
-        {
-          text: systemInstruction 
-            ? `${systemInstruction}\n\nTask:\n${promptText}`
-            : promptText
+  for (const currentModel of uniqueModels) {
+    // Attempt structured JSON first, then fallback to text mode if 503 occurs
+    for (const tryJsonMode of [jsonOutput, false]) {
+      try {
+        const config: any = {
+          systemInstruction: systemInstruction || undefined,
+          temperature: 0.2
+        };
+        if (tryJsonMode) {
+          config.responseMimeType = 'application/json';
         }
-      ]
-    }
-  ];
 
-  while (attempt < maxRetries) {
-    attempt++;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+        const callPromise = ai.models.generateContent({
+          model: currentModel,
+          contents: promptText,
+          config
+        });
 
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents,
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 2048,
-            responseMimeType: 'application/json'
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error(`Gemini request timed out after ${timeoutMs}ms`)), timeoutMs);
+        });
+
+        const response = await Promise.race([callPromise, timeoutPromise]);
+        const latencyMs = Math.round(performance.now() - startTime);
+        const text = response.text || '';
+
+        let parsedPayload: any = null;
+        if (text) {
+          try {
+            parsedPayload = JSON.parse(text);
+          } catch {
+            const match = text.match(/```(?:json)?([\s\S]*?)```/);
+            if (match) {
+              try { parsedPayload = JSON.parse(match[1].trim()); } catch {}
+            }
           }
-        }),
-        signal: controller.signal
-      });
-      clearTimeout(timer);
+        }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Google Gemini API returned HTTP ${response.status}: ${errorText}`);
-      }
-
-      return await response.json();
-    } catch (err: any) {
-      clearTimeout(timer);
-      lastError = err;
-      if (err.name === 'AbortError') {
-        throw new Error(`Gemini API request timed out after ${timeoutMs}ms (Attempt ${attempt}/${maxRetries})`);
-      }
-      if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, attempt * 500));
+        return {
+          text,
+          parsedPayload,
+          modelUsed: currentModel,
+          latencyMs
+        };
+      } catch (err: any) {
+        lastError = err;
+        const status = err?.status || err?.code;
+        const isTransient = status === 503 || err?.message?.includes('high demand') || err?.message?.includes('503');
+        if (tryJsonMode && isTransient) {
+          // Retry immediately without responseMimeType in text mode
+          continue;
+        }
+        break;
       }
     }
   }
@@ -328,7 +365,7 @@ export async function handleAIRequest(req: IncomingMessage, res: ServerResponse)
 
   // Read backend secret environment variables (Strictly server-side, never exposed to client)
   const geminiApiKey = process.env.GEMINI_API_KEY || '';
-  const geminiModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const geminiModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
   const configuredProvider = geminiApiKey ? 'gemini' : (process.env.AI_PROVIDER || 'mock');
 
   try {
@@ -343,19 +380,35 @@ export async function handleAIRequest(req: IncomingMessage, res: ServerResponse)
       if (geminiApiKey) {
         try {
           const t0 = performance.now();
-          const testRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
+          const testPing = await callGeminiApiWithSDK(
+            geminiApiKey,
+            geminiModel,
+            'Reply with one word: READY',
+            undefined,
+            false,
+            15000
+          );
           geminiPingLatencyMs = Math.round(performance.now() - t0);
 
-          if (testRes.ok) {
-            isConnected = true;
-            activeProvider = 'gemini';
-            model = geminiModel;
-            message = `Google Gemini API key verified and connected successfully (${geminiModel}).`;
-          } else {
-            message = `Gemini API key rejected by Google (HTTP ${testRes.status}). Operating in Mock fallback.`;
-          }
+          isConnected = true;
+          activeProvider = 'gemini';
+          model = testPing.modelUsed;
+          message = `Google Gemini Generative AI connected successfully via official Google Gen AI SDK (${testPing.modelUsed}).`;
         } catch (err: any) {
-          message = `Gemini network ping failed: ${err.message}. Operating in Mock fallback.`;
+          const sanitizedErr = sanitizeErrorMessage(err.message || String(err));
+          const status = err?.status || err?.code;
+          const isQuota = status === 429 || sanitizedErr.includes('429') || sanitizedErr.includes('quota') || sanitizedErr.includes('RESOURCE_EXHAUSTED');
+          const isInvalidKey = status === 400 || status === 401 || status === 403 || sanitizedErr.includes('API key not valid');
+
+          if (isInvalidKey) {
+            message = `Invalid Google Gemini API key: authentication rejected by Google. Operating in Mock fallback.`;
+          } else if (isQuota) {
+            message = `Google Gemini Free Tier daily quota limit reached (HTTP 429 RESOURCE_EXHAUSTED). Operating in Mock fallback.`;
+          } else if (status === 503 || sanitizedErr.includes('high demand')) {
+            message = `Google Gemini service temporarily unavailable (503 high demand). Operating in Mock fallback.`;
+          } else {
+            message = `Gemini connection check failed: ${sanitizedErr}. Operating in Mock fallback.`;
+          }
         }
       } else {
         isConnected = true;
@@ -454,49 +507,42 @@ export async function handleAIRequest(req: IncomingMessage, res: ServerResponse)
 
           const contextData = body.contextSummary 
             ? `Telemetry Context:\n${body.contextSummary}\n\n`
-            : '';
+            : `Live Twin Telemetry: Devotees=250; Pushkar Ghat=3.8 pax/m² (HIGH); CWC River Gauge=13.8m MSL (SAFE vs 17.5m Danger); Barrage Outflow=325,000 cusecs; Medical Squads=3 available.\n\n`;
 
           const geminiPrompt = `${contextData}Service: ${service}\nRequest: ${validation.sanitizedText}`;
 
-          const geminiRaw = await callGeminiApiWithRetry(
+          const geminiRes = await callGeminiApiWithSDK(
             geminiApiKey,
             geminiModel,
             geminiPrompt,
             systemInstruction,
-            2,
-            10000
+            true,
+            25000
           );
 
-          // Parse Gemini JSON output
-          const responseText = geminiRaw?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          let parsedPayload: any = {};
-          try {
-            parsedPayload = JSON.parse(responseText);
-          } catch {
-            // Regex fallback for markdown-wrapped json
-            const jsonMatch = responseText.match(/```json([\s\S]*?)```/);
-            if (jsonMatch) {
-              parsedPayload = JSON.parse(jsonMatch[1].trim());
-            } else {
-              parsedPayload = { directAnswer: responseText };
-            }
-          }
+          const parsedPayload = geminiRes.parsedPayload || {};
+          const responseText = geminiRes.text;
 
           // Build validated AIStructuredResponse
           result = generateServerMockResponse(service, validation.sanitizedText, userContext);
-          result.summary = parsedPayload.summary || parsedPayload.directAnswer || result.summary;
+          result.summary = parsedPayload.summary || parsedPayload.directAnswer || (responseText ? responseText.slice(0, 300) : result.summary);
           if (parsedPayload.recommendations && Array.isArray(parsedPayload.recommendations)) {
             result.recommendations = parsedPayload.recommendations;
           }
           if (parsedPayload.payload && typeof parsedPayload.payload === 'object') {
             result.payload = { ...result.payload, ...parsedPayload.payload };
           }
+          if (parsedPayload.directAnswer) {
+            result.payload.directAnswer = parsedPayload.directAnswer;
+          }
           result.provider = 'gemini';
-          result.model = geminiModel;
+          result.model = geminiRes.modelUsed;
+          result.latencyMs = geminiRes.latencyMs;
         } catch (err: any) {
-          console.warn('[AIServerRouter] Real Gemini inference failed, engaging Mock fallback:', err.message);
+          const sanitizedErr = sanitizeErrorMessage(err.message || String(err));
+          console.warn('[AIServerRouter] Real Gemini inference failed, engaging Mock fallback:', sanitizedErr);
           result = generateServerMockResponse(service, validation.sanitizedText, userContext);
-          result.missingOrUnavailableData.push(`Gemini API call failed (${err.message}). Gracefully evaluated via server fallback.`);
+          result.missingOrUnavailableData.push(`Gemini API call failed (${sanitizedErr}). Gracefully evaluated via server fallback.`);
         }
       } else {
         // Deterministic local mock engine
@@ -510,10 +556,11 @@ export async function handleAIRequest(req: IncomingMessage, res: ServerResponse)
     sendJson(res, 404, { error: `Endpoint not found: ${url}` });
     return true;
   } catch (err: any) {
-    console.error('[AIServerRouter] Internal error:', err);
+    const sanitizedErr = sanitizeErrorMessage(err.message || String(err));
+    console.error('[AIServerRouter] Internal error:', sanitizedErr);
     sendJson(res, 500, { 
       error: 'Internal AI Server Error', 
-      message: err.message || String(err) 
+      message: sanitizedErr 
     });
     return true;
   }

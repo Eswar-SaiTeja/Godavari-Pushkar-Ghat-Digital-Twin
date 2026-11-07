@@ -1,6 +1,12 @@
 import { defineConfig, Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import cesium from 'vite-plugin-cesium'
+import path from 'path'
+import dotenv from 'dotenv'
+
+// Pre-load server .env configuration
+dotenv.config({ path: path.resolve(process.cwd(), 'server/.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 function aiBackendPlugin(): Plugin {
   return {

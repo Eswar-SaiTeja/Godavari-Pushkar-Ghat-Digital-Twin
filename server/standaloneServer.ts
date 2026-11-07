@@ -11,7 +11,12 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
 import { handleAIRequest } from './aiServerRouter';
+
+// Load server-side .env configuration
+dotenv.config({ path: path.resolve(process.cwd(), 'server/.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const PORT = parseInt(process.env.PORT || '5174', 10);
 const HOST = process.env.HOST || '0.0.0.0';

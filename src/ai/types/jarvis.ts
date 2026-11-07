@@ -77,6 +77,8 @@ export interface JarvisMessage {
   humanApproval?: HumanApprovalRequirement;
   missingDataNotice?: string;
   isError?: boolean;
+  provider?: string;
+  model?: string;
 }
 
 export interface JarvisConversationState {

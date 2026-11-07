@@ -102,20 +102,35 @@ async function runVerification() {
     mockRes.statusCode === 200 &&
     healthResponseData &&
     healthResponseData.securityPosture?.keysExposedToClient === false &&
-    healthResponseData.securityPosture?.serverSideOnly === true,
+    healthResponseData.securityPosture?.serverSideOnly === true &&
+    healthResponseData.hasSecretKeyConfigured === true,
     'Test 2: Server Health Endpoint & Security Posture',
-    `Status: ${mockRes.statusCode} | Provider: ${healthResponseData?.activeProvider} | Server-Side Only: ${healthResponseData?.securityPosture?.serverSideOnly}`
+    `Status: ${mockRes.statusCode} | Provider: ${healthResponseData?.activeProvider} | Key Configured: ${healthResponseData?.hasSecretKeyConfigured}`
   );
 
   // -------------------------------------------------------------
   // Test 3: Missing API Key Graceful Handling (Zero-Crash Fallback)
   // -------------------------------------------------------------
+  const originalKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = '';
+  let fallbackData: any = null;
+  const fallbackRes: any = {
+    statusCode: 200,
+    headers: {} as Record<string, string>,
+    setHeader(name: string, val: string) { this.headers[name] = val; },
+    end(dataStr: string) { fallbackData = JSON.parse(dataStr); }
+  };
+
+  await handleAIRequest(mockReq, fallbackRes);
+  process.env.GEMINI_API_KEY = originalKey; // Restore key
+
   assert(
-    healthResponseData?.connected === true &&
-    healthResponseData?.hasSecretKeyConfigured === false &&
-    healthResponseData?.message?.includes('Mock AI Engine'),
+    fallbackData?.connected === true &&
+    fallbackData?.hasSecretKeyConfigured === false &&
+    fallbackData?.activeProvider === 'mock' &&
+    fallbackData?.message?.includes('Mock AI Engine'),
     'Test 3: Missing API Key Graceful Handling',
-    `Zero-crash local mock engaged: "${healthResponseData?.message?.slice(0, 50)}..."`
+    `Zero-crash local mock engaged: "${fallbackData?.message?.slice(0, 50)}..."`
   );
 
   // -------------------------------------------------------------
@@ -310,7 +325,7 @@ async function runVerification() {
 
     assert(
       healthRes.status === 200 &&
-      healthJson.connected === true &&
+      healthJson.hasSecretKeyConfigured === true &&
       cmdRes.status === 200 &&
       cmdJson.service === 'CommandAssistant',
       'Test 15: Standalone Production Server Live HTTP Integration',

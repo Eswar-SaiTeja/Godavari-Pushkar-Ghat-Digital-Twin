@@ -930,6 +930,12 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                         <span className="text-[9px] text-slate-500">[{msg.timestamp}]</span>
                       </div>
                       <div className="flex items-center gap-1.5">
+                        {msg.provider === 'gemini' && (
+                          <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 text-[9px] border border-cyan-500/40 font-bold flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+                            <span>Gemini ({msg.model || 'gemini-3.5-flash'})</span>
+                          </span>
+                        )}
                         {msg.relevantEntity && (
                           <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 text-[9px] border border-cyan-500/20">
                             {msg.relevantEntity.name}

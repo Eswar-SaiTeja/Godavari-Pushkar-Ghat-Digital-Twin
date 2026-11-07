@@ -11,9 +11,15 @@ node_modules
 dist
 dist-ssr
 *.local
+# Environment configuration
 .env
 .env.*
+server/.env
+server/.env.*
+*.env
+*.env.*
 !.env.example
+!server/.env.example
 chrome/
 qa_screenshots/
 
