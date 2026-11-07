@@ -86,7 +86,7 @@ async function callGeminiApiWithSDK(
   const startTime = performance.now();
   const ai = getGenAIClient(apiKey);
 
-  const candidateModels = [model, 'gemini-3.5-flash', 'gemini-3.8-flash'];
+  const candidateModels = [model || 'gemini-3.5-flash'];
   const uniqueModels = Array.from(new Set(candidateModels.filter(Boolean)));
   let lastError: any = null;
 
