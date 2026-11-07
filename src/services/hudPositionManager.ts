@@ -36,9 +36,10 @@ class HUDPositionManager {
       if (window.location.search.includes('preset=repositioned')) {
         const presets: Record<string, HUDPanelState> = {
           telemetry_hud: { x: 120, y: 160, isMinimized: false },
-          simulation_intelligence_hud: { x: Math.max(20, window.innerWidth - 460), y: 200, isMinimized: false },
-          camera_hud: { x: 120, y: Math.max(80, window.innerHeight - 200), isMinimized: false },
+          simulation_intelligence_hud: { x: Math.max(20, window.innerWidth - 460), y: 76, isMinimized: false },
+          camera_hud: { x: 120, y: 270, isMinimized: false },
           simulation_toolbar: { x: Math.max(20, Math.floor((window.innerWidth - 880) / 2)), y: Math.max(80, window.innerHeight - 170), isMinimized: false },
+          location_info_panel: { x: Math.max(20, window.innerWidth - 420), y: 220, isMinimized: false },
         };
         if (presets[panelId]) return presets[panelId];
       }
@@ -47,8 +48,9 @@ class HUDPositionManager {
         const presets: Record<string, HUDPanelState> = {
           telemetry_hud: { x: 80, y: 80, isMinimized: true },
           simulation_intelligence_hud: { x: Math.max(20, window.innerWidth - 380), y: 80, isMinimized: true },
-          camera_hud: { x: 20, y: Math.max(80, window.innerHeight - 80), isMinimized: true },
+          camera_hud: { x: 80, y: 130, isMinimized: true },
           simulation_toolbar: { x: Math.max(20, Math.floor((window.innerWidth - 500) / 2)), y: Math.max(80, window.innerHeight - 60), isMinimized: true },
+          location_info_panel: { x: Math.max(20, window.innerWidth - 320), y: 140, isMinimized: true },
         };
         if (presets[panelId]) return presets[panelId];
       }

@@ -92,11 +92,34 @@ export const DashboardLayout: React.FC = () => {
     return false;
   });
   const [aiCopilotTab, setAiCopilotTab] = useState<AICopilotTab>('chat');
-  const [activeGooeyModule, setActiveGooeyModule] = useState<GooeyModuleId>('overview');
-  const [currentViewMode, setCurrentViewMode] = useState<'OVERVIEW' | '3D_MAP'>('OVERVIEW');
+  const [activeGooeyModule, setActiveGooeyModule] = useState<GooeyModuleId>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'overview') return 'overview';
+    }
+    return '3d_twin';
+  });
+  const [currentViewMode, setCurrentViewMode] = useState<'OVERVIEW' | '3D_MAP'>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'overview') return 'OVERVIEW';
+      if (params.get('view') === '3d' || params.get('view') === 'twin') return '3D_MAP';
+    }
+    return '3D_MAP'; // Public production default: launch directly into 3D Digital Twin!
+  });
 
-  // Selected GIS Location (Pushkar Ghat selected by default for Day 1 discovery)
-  const [selectedLocation, setSelectedLocation] = useState<GhatLocation | null>(GHAT_LOCATIONS[0]);
+  // Selected GIS Location (Clean initial state; opens when user clicks a ghat or selects directory)
+  const [selectedLocation, setSelectedLocation] = useState<GhatLocation | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('ghat') === 'pushkar') return GHAT_LOCATIONS[0];
+      if (params.has('ghat')) {
+        const found = GHAT_LOCATIONS.find(g => g.id === params.get('ghat'));
+        if (found) return found;
+      }
+    }
+    return null; // Prevents covering the map on initial load
+  });
 
   // Base Imagery & Layers
   const [baseImagery, setBaseImagery] = useState<BaseImageryProvider>('osm');

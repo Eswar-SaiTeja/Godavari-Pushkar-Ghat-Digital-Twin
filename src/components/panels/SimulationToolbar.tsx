@@ -52,8 +52,8 @@ export const SimulationToolbar: React.FC<SimulationToolbarProps> = ({
   const speedOptions = [0.5, 1, 2, 5];
 
   const defaultPos = {
-    x: typeof window !== 'undefined' ? Math.max(10, Math.floor((window.innerWidth - 880) / 2)) : 260,
-    y: typeof window !== 'undefined' ? Math.max(100, window.innerHeight - 90) : 700,
+    x: typeof window !== 'undefined' ? Math.max(16, Math.floor((window.innerWidth - Math.min(840, Math.max(340, window.innerWidth - 32))) / 2)) : 260,
+    y: typeof window !== 'undefined' ? Math.max(76, window.innerHeight - 84) : 700,
   };
 
   const handleFlyToBookmark = (bm: BookmarkView) => {

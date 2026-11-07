@@ -6,6 +6,7 @@ import {
   RotateCcw, 
   GripHorizontal 
 } from 'lucide-react';
+import { hudPositionManager, GLOBAL_RESET_HUD_EVENT } from '../../services/hudPositionManager';
 
 export interface FloatingPanelProps {
   id: string;
@@ -27,6 +28,7 @@ export interface FloatingPanelProps {
 }
 
 export const FloatingPanel: React.FC<FloatingPanelProps> = ({
+  id,
   title,
   subtitle,
   icon,
@@ -43,14 +45,13 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
   className = '',
   resizable = true,
 }) => {
-  // Position state (clamped to viewport)
+  // Read persisted position or fallback to default
   const [position, setPosition] = useState<{ x: number; y: number }>(() => {
-    // Initial responsive positioning fallback
     if (typeof window !== 'undefined') {
       const isMobile = window.innerWidth < 768;
-      return isMobile 
-        ? { x: 12, y: 72 } 
-        : { x: Math.min(defaultPosition.x, window.innerWidth - 360), y: defaultPosition.y };
+      if (isMobile) return { x: 12, y: 72 };
+      const saved = hudPositionManager.getPosition(id, defaultPosition);
+      return { x: saved.x, y: saved.y };
     }
     return defaultPosition;
   });
@@ -61,7 +62,14 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     height: defaultSize.height ?? 'auto',
   });
 
-  const [isMinimized, setIsMinimized] = useState<boolean>(false);
+  const [isMinimized, setIsMinimized] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = hudPositionManager.getPosition(id, defaultPosition);
+      return saved.isMinimized;
+    }
+    return false;
+  });
+  const [zIndex, setZIndex] = useState<number>(25);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [isResizing, setIsResizing] = useState<boolean>(false);
 
@@ -79,17 +87,35 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     initialHeight: 0,
   });
 
+  // Bring panel to front on click or drag
+  const bringToFront = useCallback(() => {
+    const newZ = hudPositionManager.bringToFront();
+    setZIndex(newZ);
+  }, []);
+
   // Keep inside viewport on window resize and dragging
   const clampPosition = useCallback((x: number, y: number, currentWidth: number) => {
-    // Allow dragging freely while keeping header accessible
+    if (typeof window === 'undefined') return { x, y };
     const maxX = Math.max(0, window.innerWidth - Math.min(currentWidth, 80));
-    // Allow panel to be moved down or up, but keep header visible between top toolbar (64px) and bottom
     const maxY = Math.max(64, window.innerHeight - 50);
     return {
       x: Math.max(0, Math.min(maxX, x)),
       y: Math.max(64, Math.min(maxY, y)),
     };
   }, []);
+
+  // Listen for global reset event
+  useEffect(() => {
+    const handleGlobalReset = () => {
+      hudPositionManager.resetPosition(id);
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+      setPosition(isMobile ? { x: 12, y: 72 } : defaultPosition);
+      setIsMinimized(false);
+    };
+
+    window.addEventListener(GLOBAL_RESET_HUD_EVENT, handleGlobalReset);
+    return () => window.removeEventListener(GLOBAL_RESET_HUD_EVENT, handleGlobalReset);
+  }, [id, defaultPosition]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -102,8 +128,18 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, [clampPosition]);
 
+  // Save state to localStorage whenever position or minimized status changes
+  const saveState = useCallback((newPos: { x: number; y: number }, minimized: boolean) => {
+    hudPositionManager.savePosition(id, {
+      x: newPos.x,
+      y: newPos.y,
+      isMinimized: minimized
+    });
+  }, [id]);
+
   // Pointer drag handling on header
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    bringToFront();
     // Only primary button or touch
     if (e.button !== 0 && e.pointerType === 'mouse') return;
 
@@ -142,6 +178,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
 
       const clamped = clampPosition(rawX, rawY, currentWidth);
       setPosition(clamped);
+      saveState(clamped, isMinimized);
     };
 
     const onPointerUp = (upEvent: PointerEvent) => {
@@ -162,6 +199,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
 
   // Resize handler (bottom-right corner)
   const handleResizePointerDown = (e: React.PointerEvent<HTMLDivElement>, direction: 'se' | 'e' | 's') => {
+    bringToFront();
     e.preventDefault();
     e.stopPropagation();
     setIsResizing(true);
@@ -208,13 +246,24 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
 
   // Reset to default location and size
   const handleReset = () => {
-    const isMobile = window.innerWidth < 768;
-    setPosition(isMobile ? { x: 12, y: 72 } : defaultPosition);
+    hudPositionManager.resetPosition(id);
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    const resetPos = isMobile ? { x: 12, y: 72 } : defaultPosition;
+    setPosition(resetPos);
     setSize({
       width: isMobile ? window.innerWidth - 24 : defaultSize.width,
       height: defaultSize.height ?? 'auto',
     });
     setIsMinimized(false);
+    saveState(resetPos, false);
+  };
+
+  const handleToggleMinimize = () => {
+    setIsMinimized(prev => {
+      const next = !prev;
+      saveState(position, next);
+      return next;
+    });
   };
 
   if (!isOpen) return null;
@@ -222,6 +271,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
   return (
     <div
       ref={panelRef}
+      onPointerDown={bringToFront}
       onWheel={(e) => e.stopPropagation()}
       onWheelCapture={(e) => e.stopPropagation()}
       style={{
@@ -230,8 +280,9 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
         width: `${size.width}px`,
         height: isMinimized ? 'auto' : (typeof size.height === 'number' ? `${size.height}px` : 'auto'),
         maxHeight: isMinimized ? 'auto' : `min(${maxHeight}px, calc(100vh - ${Math.max(64, position.y)}px - 56px))`,
+        zIndex,
       }}
-      className={`fixed z-30 flex flex-col glass-panel rounded-xl border border-cyan-500/30 shadow-panel select-none overflow-hidden transition-shadow pointer-events-auto ${
+      className={`fixed flex flex-col glass-panel rounded-xl border border-cyan-500/30 shadow-panel select-none overflow-hidden transition-shadow pointer-events-auto ${
         isDragging ? 'shadow-glow-cyan cursor-grabbing opacity-95' : 'shadow-2xl'
       } ${className}`}
     >
@@ -275,7 +326,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
 
           {/* Minimize / Restore */}
           <button
-            onClick={() => setIsMinimized(prev => !prev)}
+            onClick={handleToggleMinimize}
             className="p-1 rounded text-slate-400 hover:text-cyan-300 hover:bg-slate-800/80 transition-colors"
             title={isMinimized ? 'Restore panel' : 'Minimize panel'}
             aria-label={isMinimized ? 'Restore panel' : 'Minimize panel'}

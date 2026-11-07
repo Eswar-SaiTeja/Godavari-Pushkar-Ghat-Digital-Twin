@@ -99,13 +99,9 @@ export class CesiumService {
       requestRenderMode: false,
     });
 
-    log('3. Adding OpenStreetMap base imagery layer...');
-    const osmProvider = new Cesium.OpenStreetMapImageryProvider({
-      url: 'https://tile.openstreetmap.org/',
-      maximumLevel: 19,
-      credit: '© OpenStreetMap contributors (ODbL)'
-    });
-    const baseLayer = viewer.imageryLayers.addImageryProvider(osmProvider);
+    log('3. Adding base imagery layer with automatic fallback...');
+    const primaryProvider = this.createBaseImageryProvider('osm');
+    const baseLayer = viewer.imageryLayers.addImageryProvider(primaryProvider);
     baseLayer.errorEvent.addEventListener(() => {
       console.warn('[CesiumService] Primary basemap tile warning handled; keeping fallback surface.');
     });
@@ -306,6 +302,56 @@ export class CesiumService {
   }
 
   /**
+   * Creates reliable, CORS-enabled basemap imagery providers with zero API key dependencies
+   */
+  public createBaseImageryProvider(providerType: BaseImageryProvider = 'osm'): Cesium.ImageryProvider {
+    switch (providerType) {
+      case 'osm':
+      case 'carto_voyager':
+        // CartoDB Voyager: High-performance OpenStreetMap vector cartography hosted on open CDN with zero rate limits
+        return new Cesium.UrlTemplateImageryProvider({
+          url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+          subdomains: ['a', 'b', 'c', 'd'],
+          maximumLevel: 19,
+          credit: '© OpenStreetMap contributors, © CARTO'
+        });
+
+      case 'esri_satellite':
+      case 'arcgis_world':
+      case 'sentinel_aerial':
+        return new Cesium.UrlTemplateImageryProvider({
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          maximumLevel: 19,
+          credit: '© Esri World Imagery, Maxar, Earthstar Geographics'
+        });
+
+      case 'esri_topo':
+        return new Cesium.UrlTemplateImageryProvider({
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+          maximumLevel: 19,
+          credit: '© Esri World Topographic Map, HERE, Garmin'
+        });
+
+      case 'dark_canvas':
+      case 'carto_dark':
+        return new Cesium.UrlTemplateImageryProvider({
+          url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+          subdomains: ['a', 'b', 'c', 'd'],
+          maximumLevel: 19,
+          credit: '© OpenStreetMap contributors, © CARTO'
+        });
+
+      default:
+        return new Cesium.UrlTemplateImageryProvider({
+          url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+          subdomains: ['a', 'b', 'c', 'd'],
+          maximumLevel: 19,
+          credit: '© OpenStreetMap contributors, © CARTO'
+        });
+    }
+  }
+
+  /**
    * Sets the base imagery provider with graceful fallback and error handling
    */
   public async setBaseImagery(providerType: BaseImageryProvider): Promise<{ success: boolean; activeProvider: BaseImageryProvider; message?: string }> {
@@ -351,84 +397,7 @@ export class CesiumService {
       }
     }
 
-    let newProvider: Cesium.ImageryProvider;
-    const cartoKey = import.meta.env.VITE_CARTO_API_KEY;
-
-    switch (providerType) {
-      case 'osm':
-        newProvider = new Cesium.OpenStreetMapImageryProvider({
-          url: 'https://tile.openstreetmap.org/',
-          maximumLevel: 19,
-          credit: '© OpenStreetMap contributors (ODbL)'
-        });
-        break;
-
-      case 'esri_satellite':
-      case 'arcgis_world':
-      case 'sentinel_aerial':
-        newProvider = new Cesium.UrlTemplateImageryProvider({
-          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-          maximumLevel: 19,
-          credit: '© Esri World Imagery, Maxar, Earthstar Geographics'
-        });
-        break;
-
-      case 'esri_topo':
-        newProvider = new Cesium.UrlTemplateImageryProvider({
-          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-          maximumLevel: 19,
-          credit: '© Esri World Topographic Map, HERE, Garmin'
-        });
-        break;
-
-      case 'dark_canvas':
-        newProvider = new Cesium.UrlTemplateImageryProvider({
-          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-          maximumLevel: 19,
-          credit: '© Esri Dark Gray Canvas'
-        });
-        break;
-
-      case 'carto_dark':
-        if (cartoKey && cartoKey.trim().length > 5) {
-          newProvider = new Cesium.UrlTemplateImageryProvider({
-            url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?api_key=${encodeURIComponent(cartoKey.trim())}`,
-            subdomains: ['a', 'b', 'c', 'd'],
-            credit: '© CARTO'
-          });
-        } else {
-          // Graceful fallback to Esri Dark Canvas - NO API KEY needed, NO watermarks!
-          console.warn('[CesiumService] Carto API key not configured; seamlessly using Esri Dark Canvas fallback.');
-          newProvider = new Cesium.UrlTemplateImageryProvider({
-            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-            credit: '© Esri Dark Gray Canvas (High-Contrast Fallback)'
-          });
-        }
-        break;
-
-      case 'carto_voyager':
-        if (cartoKey && cartoKey.trim().length > 5) {
-          newProvider = new Cesium.UrlTemplateImageryProvider({
-            url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?api_key=${encodeURIComponent(cartoKey.trim())}`,
-            subdomains: ['a', 'b', 'c', 'd'],
-            credit: '© CARTO Voyager'
-          });
-        } else {
-          // Graceful fallback to Esri Topo - NO API KEY needed, NO watermarks!
-          console.warn('[CesiumService] Carto API key not configured; seamlessly using Esri Topographic fallback.');
-          newProvider = new Cesium.UrlTemplateImageryProvider({
-            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-            credit: '© Esri World Topo Map (Fallback)'
-          });
-        }
-        break;
-
-      default:
-        newProvider = new Cesium.OpenStreetMapImageryProvider({
-          url: 'https://tile.openstreetmap.org/',
-          credit: '© OpenStreetMap contributors'
-        });
-    }
+    const newProvider = this.createBaseImageryProvider(providerType);
 
     try {
       // Replace imagery layer

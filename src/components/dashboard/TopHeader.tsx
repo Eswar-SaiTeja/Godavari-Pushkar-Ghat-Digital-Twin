@@ -123,44 +123,44 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   return (
     <header className="h-16 w-full glass-panel border-b border-cyan-500/20 px-3 md:px-5 flex items-center justify-between z-30 select-none shadow-lg">
       {/* Left: Mobile trigger & Project Branding */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-shrink-0 min-w-0">
         <button
           onClick={onToggleSidebar}
-          className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-cyan-400 border border-cyan-500/30 transition-colors lg:hidden focus:outline-none"
+          className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-cyan-400 border border-cyan-500/30 transition-colors lg:hidden focus:outline-none flex-shrink-0"
           title="Toggle Navigation Menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-2.5">
-          <div className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500/20 via-blue-600/30 to-slate-900 border border-cyan-400/40 shadow-glow-sm">
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <div className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500/20 via-blue-600/30 to-slate-900 border border-cyan-400/40 shadow-glow-sm flex-shrink-0">
             <Radio className="w-5 h-5 text-cyan-300 animate-pulse" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm md:text-base font-bold tracking-wider text-slate-100 uppercase font-sans">
+          <div className="flex flex-col justify-center">
+            <div className="flex items-center gap-2 whitespace-nowrap">
+              <h1 className="text-sm md:text-base font-bold tracking-wider text-slate-100 uppercase font-sans leading-tight">
                 Godavari Pushkar Ghat
               </h1>
-              <span className="hidden sm:inline-block px-1.5 py-0.5 text-[9px] font-mono font-bold tracking-widest text-cyan-300 bg-cyan-950/80 border border-cyan-500/30 rounded">
+              <span className="inline-block px-1.5 py-0.5 text-[9px] font-mono font-bold tracking-widest text-cyan-300 bg-cyan-950/80 border border-cyan-500/30 rounded whitespace-nowrap">
                 3D DIGITAL TWIN
               </span>
             </div>
-            <p className="text-[10px] md:text-xs text-slate-400 flex items-center gap-1.5 font-mono">
+            <p className="text-[10px] md:text-xs text-slate-400 flex items-center gap-1.5 font-mono whitespace-nowrap leading-tight mt-0.5">
               <span className="text-cyan-400 font-medium">Rajamahendravaram</span>
               <span>•</span>
               <span className="text-slate-300">AP, India</span>
-              <span className="hidden md:inline text-slate-500">|</span>
-              <span className="hidden md:inline text-emerald-400 font-semibold">17.0084° N, 81.7669° E [VERIFIED]</span>
+              <span className="hidden xl:inline text-slate-500">|</span>
+              <span className="hidden xl:inline text-emerald-400 font-semibold">17.0084° N, 81.7669° E [VERIFIED]</span>
             </p>
           </div>
         </div>
       </div>
 
       {/* Middle: Simulation Scenario Selector & DEM Badge */}
-      <div className="hidden lg:flex items-center gap-3">
+      <div className="hidden xl:flex items-center gap-3 flex-shrink-0">
         {/* Terrain Provider Status */}
         <div 
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900/90 border border-slate-700/60 text-[11px] font-mono text-slate-300 cursor-help"
+          className="hidden 2xl:flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900/90 border border-slate-700/60 text-[11px] font-mono text-slate-300 cursor-help"
           title={terrainStatusMessage}
         >
           <Database className="w-3.5 h-3.5 text-cyan-400" />

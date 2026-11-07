@@ -14,9 +14,10 @@ export interface CameraHUDProps {
 }
 
 export const CameraHUD: React.FC<CameraHUDProps> = ({ telemetry }) => {
+  // Positioned directly below Telemetry HUD (StatusCards at y: 76) on top-left to avoid colliding with bottom SimulationToolbar
   const defaultPos = {
-    x: 20,
-    y: typeof window !== 'undefined' ? Math.max(100, window.innerHeight - 130) : 650,
+    x: 76,
+    y: 172,
   };
 
   const formattedAlt = telemetry.altitudeMeters > 1000
