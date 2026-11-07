@@ -17,9 +17,9 @@ export class ServerClientAIProvider implements AIProvider {
 
   constructor(baseUrl?: string) {
     if (baseUrl !== undefined) {
-      this.baseUrl = baseUrl;
+      this.baseUrl = baseUrl.replace(/\/+$/, '');
     } else if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_API_BASE_URL) {
-      this.baseUrl = (import.meta as any).env.VITE_API_BASE_URL;
+      this.baseUrl = String((import.meta as any).env.VITE_API_BASE_URL).replace(/\/+$/, '');
     } else {
       this.baseUrl = '';
     }
@@ -94,7 +94,7 @@ export class ServerClientAIProvider implements AIProvider {
     contextSummary: string,
     options?: GenerateOptions
   ): Promise<AIStructuredResponse<T>> {
-    const timeoutMs = options?.timeoutMs || 10000;
+    const timeoutMs = options?.timeoutMs || 25000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 

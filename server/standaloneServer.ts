@@ -14,11 +14,19 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { handleAIRequest } from './aiServerRouter';
 
-// Load server-side .env configuration
-dotenv.config({ path: path.resolve(process.cwd(), 'server/.env') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// Capture system environment variables before local .env files are loaded (essential for Render / Heroku / AWS PORT assignment)
+const systemPort = process.env.PORT;
 
-const PORT = parseInt(process.env.PORT || '5174', 10);
+// Load server-side .env configuration for local dev if files exist
+if (fs.existsSync(path.resolve(process.cwd(), 'server/.env'))) {
+  dotenv.config({ path: path.resolve(process.cwd(), 'server/.env') });
+}
+if (fs.existsSync(path.resolve(process.cwd(), '.env'))) {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+}
+
+// In Render and cloud PaaS, systemPort injected by the platform takes precedence
+const PORT = parseInt(systemPort || process.env.PORT || '5174', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const DIST_DIR = path.resolve(process.cwd(), 'dist');
 
@@ -40,10 +48,21 @@ const server = http.createServer(async (req, res) => {
 
   // 0. Cloud Load Balancer & Container Health Check Endpoint (Render, Railway, AWS, Fly.io)
   if (url === '/health' || url === '/api/health') {
+    const allowedOrigin = process.env.CORS_ORIGIN || '*';
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': allowedOrigin,
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept, Origin, X-Requested-With, x-force-retry'
+      });
+      res.end();
+      return;
+    }
     res.writeHead(200, {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS'
+      'Access-Control-Allow-Origin': allowedOrigin,
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept, Origin, X-Requested-With, x-force-retry'
     });
     res.end(JSON.stringify({
       status: 'healthy',

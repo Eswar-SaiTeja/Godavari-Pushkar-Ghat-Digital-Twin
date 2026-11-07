@@ -109,13 +109,37 @@ npm start
 # Listens on http://0.0.0.0:5174 (or process.env.PORT)
 ```
 
-### Deploying to Vercel
-1. Import repository into Vercel.
-2. Build Command: `npm run build` | Output Directory: `dist`.
-3. Add Environment Variables:
+### Deploying Frontend to Vercel + Backend to Render (Recommended Architecture)
+
+#### Step 1: Deploy Backend to Render
+1. Open [Render Dashboard](https://dashboard.render.com/) and click **New +** $\rightarrow$ **Web Service** (or **Blueprint** using `render.yaml`).
+2. Connect your GitHub repository: `Eswar-SaiTeja/Godavari-Pushkar-Ghat-Digital-Twin`.
+3. Configure Service:
+   - **Name**: `godavari-twin-backend`
+   - **Runtime**: `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm run start`
+   - **Health Check Path**: `/health`
+4. Add Environment Variables in Render:
    - `GEMINI_API_KEY`: `<Your Google Gemini API Key>`
-   - `GEMINI_MODEL`: `gemini-3.5-flash`
-4. Deploy! Static frontend assets and serverless AI endpoints (`api/ai/*`) deploy automatically via `vercel.json`.
+   - `GEMINI_MODEL`: `gemini-2.5-flash`
+   - `CORS_ORIGIN`: `*` (or your Vercel domain once deployed)
+5. Click **Deploy Web Service**. Render provides a URL (e.g. `https://godavari-twin-backend.onrender.com`).
+
+#### Step 2: Deploy Frontend to Vercel
+1. Open [Vercel Dashboard](https://vercel.com/new) and import `Eswar-SaiTeja/Godavari-Pushkar-Ghat-Digital-Twin`.
+2. Framework Preset: **Vite** (Root Directory: `./`).
+3. Add Environment Variable in Vercel:
+   - `VITE_API_BASE_URL`: `https://godavari-twin-backend.onrender.com` (your Render URL from Step 1)
+4. Click **Deploy**. Vercel serves the high-performance 3D React/Cesium application globally with edge caching.
+
+---
+
+### Alternative: All-in-One Vercel Full-Stack
+If you prefer deploying everything on Vercel without a separate Render service:
+1. Import repository into Vercel.
+2. Add `GEMINI_API_KEY` and `GEMINI_MODEL=gemini-2.5-flash` in Vercel Environment Variables.
+3. Deploy! The serverless AI functions (`api/ai/*`) handle all requests directly.
 
 ---
 

@@ -1062,12 +1062,13 @@ class JarvisNLEngine {
     if (typeof fetch === 'undefined') return null;
 
     try {
-      const baseUrl = typeof window !== 'undefined' 
+      const rawUrl = typeof window !== 'undefined' 
         ? ((typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_API_BASE_URL) || '') 
         : (process.env.API_BASE_URL || 'http://127.0.0.1:5173');
+      const baseUrl = String(rawUrl).replace(/\/+$/, '');
       const contextSummary = `Live Telemetry: Devotees=${metrics.activePedestriansSimulated}; RiverGauge=${metrics.cwcWaterLevelMsl}m MSL (SAFE); Incidents=${metrics.activeSafetyAlerts}; Language=${lang}`;
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 20000);
+      const timer = setTimeout(() => controller.abort(), 35000);
 
       const res = await fetch(`${baseUrl}/api/ai/command`, {
         method: 'POST',

@@ -45,7 +45,7 @@ function sendJson(res: ServerResponse, statusCode: number, data: any) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-force-retry');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-force-retry, Accept, Origin, X-Requested-With');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.end(JSON.stringify(data));
 }
@@ -676,7 +676,7 @@ export async function handleAIRequest(req: IncomingMessage, res: ServerResponse)
     res.statusCode = 204;
     res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-force-retry');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-force-retry, Accept, Origin, X-Requested-With');
     res.end();
     return true;
   }

@@ -1,0 +1,23 @@
+# Render Blueprint Configuration
+# Godavari Pushkar Ghat 3D Digital Twin - AI Backend Service
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: godavari-twin-backend
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: npm run start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_API_KEY
+        sync: false
