@@ -36,7 +36,8 @@ import {
   Megaphone,
   GitFork,
   Mic,
-  MicOff
+  MicOff,
+  Clock
 } from 'lucide-react';
 import { AIModuleStatusBar } from './AIModuleStatusBar';
 import { AIOperationsReportsView } from './AIOperationsReportsView';
@@ -115,6 +116,10 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   const [userRole, setUserRole] = useState<UserRole>('COMMANDER');
   const [auditLogs, setAuditLogs] = useState<AIAuditLogEntry[]>([]);
   const [activeExecutedMapAction, setActiveExecutedMapAction] = useState<string | null>(null);
+
+  // Gemini Quota Exhaustion & Circuit Breaker State
+  const [isRetryingConnection, setIsRetryingConnection] = useState<boolean>(false);
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(0);
 
   // Voice Input Speech Recognition State (Phase 2)
   const [isListening, setIsListening] = useState<boolean>(false);
@@ -322,6 +327,44 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     };
   }, []);
 
+  // Live countdown timer for Gemini quota exhaustion reset
+  useEffect(() => {
+    if (providerHealth?.quotaState?.quotaExhausted && providerHealth.quotaState.resetTimestamp) {
+      const updateRemaining = () => {
+        const target = new Date(providerHealth.quotaState!.resetTimestamp!).getTime();
+        const rem = Math.max(0, Math.round((target - Date.now()) / 1000));
+        setCountdownSeconds(rem);
+      };
+      updateRemaining();
+      const interval = setInterval(updateRemaining, 1000);
+      return () => clearInterval(interval);
+    } else {
+      setCountdownSeconds(0);
+    }
+  }, [providerHealth?.quotaState?.quotaExhausted, providerHealth?.quotaState?.resetTimestamp]);
+
+  const formatCountdown = (secs: number): string => {
+    if (secs <= 0) return 'Reset window reached';
+    const hrs = Math.floor(secs / 3600);
+    const mins = Math.floor((secs % 3600) / 60);
+    const remSecs = Math.floor(secs % 60);
+    if (hrs > 0) return `${hrs}h ${mins}m ${remSecs}s`;
+    if (mins > 0) return `${mins}m ${remSecs}s`;
+    return `${remSecs}s`;
+  };
+
+  const handleManualRetryConnection = async () => {
+    setIsRetryingConnection(true);
+    try {
+      const updatedHealth = await providerManager.retryConnection();
+      setProviderHealth(updatedHealth);
+    } catch (err) {
+      console.warn('[AICopilotDrawer] Retry connection failed:', err);
+    } finally {
+      setIsRetryingConnection(false);
+    }
+  };
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, isLoading]);
@@ -448,7 +491,8 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     try {
       const jarvisResponse = await jarvisNLEngine.processQuery(queryText, {
         user: currentUser,
-        forcedLanguage: selectedLanguage
+        forcedLanguage: selectedLanguage,
+        preferLiveBackend: true
       });
 
       setChatMessages(prev => [...prev, jarvisResponse]);
@@ -724,9 +768,16 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                   COPILOT
                 </span>
               </h2>
-              <Badge variant={providerHealth?.connected ? 'emerald' : 'amber'} size="sm">
-                {providerHealth?.activeProvider.toUpperCase() || 'MOCK'} {providerHealth?.connected ? 'ONLINE' : 'CONNECTING'}
-              </Badge>
+              {providerHealth?.quotaState?.quotaExhausted ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                  <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
+                  QUOTA EXHAUSTED (MOCK ENGINE)
+                </span>
+              ) : (
+                <Badge variant={providerHealth?.connected ? 'emerald' : 'amber'} size="sm">
+                  {providerHealth?.activeProvider.toUpperCase() || 'MOCK'} {providerHealth?.connected ? 'ONLINE' : 'CONNECTING'}
+                </Badge>
+              )}
             </div>
             <p className="text-[10px] text-slate-400">
               Godavari Pushkar Ghat Intelligent Command Assistant
@@ -881,6 +932,46 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
         {/* VIEW A: JARVIS NATURAL LANGUAGE CHAT */}
         {activeTab === 'chat' && (
           <div className="space-y-4">
+            {/* Quota Exhaustion Alert & Circuit Breaker Banner with Manual Retry */}
+            {providerHealth?.quotaState?.quotaExhausted && (
+              <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-950/80 via-slate-900/95 to-amber-950/80 border border-amber-500/50 shadow-glow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fadeIn">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 shrink-0 mt-0.5">
+                    <AlertTriangle className="w-4 h-4 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-amber-300 text-xs tracking-wide">
+                        Gemini API Quota Exhausted (HTTP 429 RESOURCE_EXHAUSTED)
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] border border-amber-500/30 font-mono">
+                        Free Tier Limit: {providerHealth.quotaState.quotaLimit || 20} req/day
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-1 leading-snug font-sans">
+                      Circuit breaker active preventing repeated calls. Operating on verified local <strong className="text-amber-300 font-bold">Mock AI Simulator (SIMULATED)</strong>.
+                    </p>
+                    <div className="text-[10px] text-amber-400/90 mt-1 font-mono flex items-center gap-1.5">
+                      <Clock className="w-3 h-3 text-amber-400" />
+                      <span>Next auto-retry reset window: <strong>{formatCountdown(countdownSeconds)}</strong></span>
+                      <span className="text-slate-500">•</span>
+                      <span className="text-slate-400 text-[9px]">{providerHealth.quotaState.model || 'gemini-3.5-flash'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleManualRetryConnection}
+                  disabled={isRetryingConnection}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 hover:text-white border border-amber-500/50 text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  title="Force bypass circuit breaker cooldown and verify Gemini connection now"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 text-amber-400 ${isRetryingConnection ? 'animate-spin' : ''}`} />
+                  <span>{isRetryingConnection ? 'Testing API...' : 'Retry Connection Now'}</span>
+                </button>
+              </div>
+            )}
+
             {/* Suggested Question Pills */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -930,10 +1021,19 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                         <span className="text-[9px] text-slate-500">[{msg.timestamp}]</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        {msg.provider === 'gemini' && (
+                        {msg.provider === 'gemini' && !msg.isSimulatedMock && (
                           <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 text-[9px] border border-cyan-500/40 font-bold flex items-center gap-1">
                             <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
                             <span>Gemini ({msg.model || 'gemini-3.5-flash'})</span>
+                          </span>
+                        )}
+                        {(msg.provider === 'server-mock' || msg.provider === 'mock' || msg.isSimulatedMock) && (
+                          <span 
+                            className="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 text-[9px] border border-amber-500/40 font-bold flex items-center gap-1"
+                            title="Deterministic local simulation engine fallback. Not a live Gemini LLM response."
+                          >
+                            <Activity className="w-2.5 h-2.5 text-amber-400" />
+                            <span>SIMULATED (MOCK FALLBACK)</span>
                           </span>
                         )}
                         {msg.relevantEntity && (

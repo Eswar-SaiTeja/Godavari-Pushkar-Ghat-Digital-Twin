@@ -4,7 +4,7 @@
  * Godavari Pushkar Ghat 3D Digital Twin – Rajamahendravaram
  */
 
-import { DataClassification, DataReference, HumanApprovalRequirement } from './ai';
+import { DataClassification, DataReference, HumanApprovalRequirement, AIQuotaState } from './ai';
 
 export type JarvisLanguage = 'en' | 'te' | 'hi';
 
@@ -79,6 +79,8 @@ export interface JarvisMessage {
   isError?: boolean;
   provider?: string;
   model?: string;
+  isSimulatedMock?: boolean;
+  quotaState?: AIQuotaState;
 }
 
 export interface JarvisConversationState {

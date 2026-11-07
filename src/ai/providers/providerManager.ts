@@ -38,6 +38,19 @@ class ProviderManager {
     return health;
   }
 
+  /**
+   * Manual Retry Connection: forces bypass of circuit breaker cooldown
+   */
+  public async retryConnection(): Promise<AIProviderHealth> {
+    if ('retryConnection' in this.activeProvider) {
+      const health = await (this.activeProvider as any).retryConnection();
+      this.currentHealth = health;
+      this.listeners.forEach(fn => fn(health));
+      return health;
+    }
+    return this.refreshHealth();
+  }
+
   public getCachedHealth(): AIProviderHealth | null {
     return this.currentHealth;
   }

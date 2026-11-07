@@ -191,6 +191,7 @@ async function runAllTests() {
   if (!allPassed) {
     process.exit(1);
   }
+  process.exit(0);
 }
 
 runAllTests().catch(err => {

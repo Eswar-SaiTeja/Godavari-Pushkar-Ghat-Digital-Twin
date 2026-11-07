@@ -38,6 +38,23 @@ const MIME_TYPES: Record<string, string> = {
 const server = http.createServer(async (req, res) => {
   const url = req.url || '/';
 
+  // 0. Cloud Load Balancer & Container Health Check Endpoint (Render, Railway, AWS, Fly.io)
+  if (url === '/health' || url === '/api/health') {
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS'
+    });
+    res.end(JSON.stringify({
+      status: 'healthy',
+      service: 'godavari-twin-ai-server',
+      version: '2.5.0',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString()
+    }));
+    return;
+  }
+
   // 1. Route AI API Requests through Secure Server Router
   if (url.startsWith('/api/ai')) {
     const handled = await handleAIRequest(req, res);

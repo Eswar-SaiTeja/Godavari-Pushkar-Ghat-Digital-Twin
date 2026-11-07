@@ -23,7 +23,14 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
-import { handleAIRequest } from '../server/aiServerRouter';
+import { 
+  handleAIRequest, 
+  parseQuotaErrorDetails, 
+  recordQuotaExhaustion, 
+  checkCircuitBreaker, 
+  resetCircuitBreaker, 
+  circuitBreakerState 
+} from '../server/aiServerRouter';
 import { jarvisNLEngine } from '../src/ai/core/jarvisNLEngine';
 import { jarvisToolRegistry } from '../src/ai/core/jarvisToolRegistry';
 import { crowdPredictionEngine } from '../src/ai/predictive/crowdPredictionEngine';
@@ -37,7 +44,7 @@ import { reportExportService } from '../src/ai/services/reportExportService';
 import { mockAIProvider } from '../src/ai/providers/mockAIProvider';
 
 let passedTests = 0;
-const totalTests = 15;
+const totalTests = 20;
 
 function assert(condition: boolean, testName: string, details?: string) {
   if (condition) {
@@ -144,7 +151,7 @@ async function runVerification() {
   );
 
   // -------------------------------------------------------------
-  // Test 5: Mock AI Provider Response Schema
+  // Test 5: Mock AI Provider Response Schema & Explicit SIMULATED Label
   // -------------------------------------------------------------
   const mockAIRes = await mockAIProvider.generateStructured(
     'CommandAssistant',
@@ -156,10 +163,11 @@ async function runVerification() {
     mockAIRes.id.startsWith('ai-resp-') &&
     mockAIRes.service === 'CommandAssistant' &&
     typeof mockAIRes.summary === 'string' &&
-    mockAIRes.dataClassification === 'AI_INFERRED' &&
+    mockAIRes.dataClassification === 'SIMULATED' &&
+    mockAIRes.isSimulatedMock === true &&
     mockAIRes.confidence.score >= 0.85,
-    'Test 5: Mock Provider Structured Schema Compliance',
-    `Latency: ${mockAIRes.latencyMs}ms | Score: ${mockAIRes.confidence.score} (${mockAIRes.confidence.level})`
+    'Test 5: Mock Provider Structured Schema Compliance & SIMULATED Label',
+    `Latency: ${mockAIRes.latencyMs}ms | Classification: ${mockAIRes.dataClassification} | isSimulatedMock: ${mockAIRes.isSimulatedMock}`
   );
 
   // -------------------------------------------------------------
@@ -299,7 +307,131 @@ async function runVerification() {
   );
 
   // -------------------------------------------------------------
-  // Test 15: Standalone Production Server Live HTTP Integration
+  // Test 15: Google RPC HTTP 429 Quota Error Details Parser
+  // -------------------------------------------------------------
+  const simulatedGoogle429Rpc = {
+    error: {
+      code: 429,
+      status: 'RESOURCE_EXHAUSTED',
+      message: 'Generate content requests per day limit exceeded on Free Tier; limit: 20 per day. Please retry in 24m49.182031901s.',
+      details: [
+        {
+          '@type': 'type.googleapis.com/google.rpc.Help',
+          links: [{ description: 'Learn more about Gemini API quotas', url: 'https://aistudio.google.com/docs/rate-limits' }]
+        },
+        {
+          '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
+          violations: [{
+            quotaMetric: 'generativelanguage.googleapis.com/generate_content_free_tier_requests',
+            quotaValue: '20',
+            quotaDimensions: { location: 'global', model: 'gemini-3.5-flash' }
+          }]
+        },
+        {
+          '@type': 'type.googleapis.com/google.rpc.RetryInfo',
+          retryDelay: '1489s'
+        }
+      ]
+    }
+  };
+
+  const parsedQuotaRpc = parseQuotaErrorDetails(simulatedGoogle429Rpc);
+  assert(
+    parsedQuotaRpc.isQuota === true &&
+    parsedQuotaRpc.retryDelaySeconds === 1489 &&
+    parsedQuotaRpc.retryAfterFormatted === '24m 49s' &&
+    parsedQuotaRpc.quotaMetric === 'generativelanguage.googleapis.com/generate_content_free_tier_requests' &&
+    parsedQuotaRpc.quotaLimit === 20 &&
+    parsedQuotaRpc.source === 'google_rpc_retry_info',
+    'Test 15: Google RPC HTTP 429 Quota Error Details Parser',
+    `Parsed 1489s -> ${parsedQuotaRpc.retryAfterFormatted} | Metric: ${parsedQuotaRpc.quotaMetric} | Limit: ${parsedQuotaRpc.quotaLimit}`
+  );
+
+  // -------------------------------------------------------------
+  // Test 16: Regex Duration Quota Parsing (Hour/Minute/Second)
+  // -------------------------------------------------------------
+  const simulatedRegexError = new Error(
+    'You exceeded your current quota for model: gemini-3.5-flash, limit: 15. Please retry in 1h5m30s.'
+  );
+  const parsedRegexQuota = parseQuotaErrorDetails(simulatedRegexError);
+  assert(
+    parsedRegexQuota.isQuota === true &&
+    parsedRegexQuota.retryDelaySeconds === 3930 && // 1*3600 + 5*60 + 30
+    parsedRegexQuota.retryAfterFormatted === '1h 5m 30s' &&
+    parsedRegexQuota.quotaLimit === 15 &&
+    parsedRegexQuota.source === 'message_regex',
+    'Test 16: Regex Duration Quota Parsing (Hour/Minute/Second)',
+    `Extracted from raw text: ${parsedRegexQuota.retryAfterFormatted} (${parsedRegexQuota.retryDelaySeconds}s)`
+  );
+
+  // -------------------------------------------------------------
+  // Test 17: Circuit Breaker Google Shielding & Cooldown Window
+  // -------------------------------------------------------------
+  resetCircuitBreaker();
+  recordQuotaExhaustion(parsedQuotaRpc);
+
+  const breakerCheck = checkCircuitBreaker();
+  assert(
+    breakerCheck.isOpen === true &&
+    breakerCheck.quotaState.quotaExhausted === true &&
+    breakerCheck.quotaState.circuitBreakerActive === true &&
+    breakerCheck.remainingSeconds > 0 &&
+    breakerCheck.formatted.length > 0,
+    'Test 17: Circuit Breaker Google Shielding & Cooldown Window',
+    `Breaker OPEN (Active: ${breakerCheck.quotaState.circuitBreakerActive}) | Cooldown: ~${breakerCheck.formatted}`
+  );
+
+  // -------------------------------------------------------------
+  // Test 18: Manual Force Retry Connection Endpoint
+  // -------------------------------------------------------------
+  // When force=true is passed, checkCircuitBreaker bypasses the cooldown
+  const forceBreakerCheck = checkCircuitBreaker(true);
+  assert(
+    forceBreakerCheck.isOpen === false &&
+    forceBreakerCheck.quotaState.circuitBreakerActive === false,
+    'Test 18: Manual Force Retry Connection Endpoint',
+    `Force parameter successfully bypassed circuit breaker to probe live upstream API`
+  );
+
+  // -------------------------------------------------------------
+  // Test 19: Strict Non-Silent Fallback (No False Gemini Claims)
+  // -------------------------------------------------------------
+  const forcedMockReq: any = {
+    url: '/api/ai/command',
+    method: 'POST',
+    headers: { 'x-forwarded-for': '127.0.0.1' },
+    socket: { remoteAddress: '127.0.0.1' },
+    on(event: string, callback: any) {
+      if (event === 'data') callback(Buffer.from(JSON.stringify({ prompt: 'Crowd density check', service: 'CommandAssistant' })));
+      if (event === 'end') callback();
+      return this;
+    }
+  };
+
+  let commandData: any = null;
+  const forcedMockRes: any = {
+    statusCode: 200,
+    headers: {} as Record<string, string>,
+    setHeader(name: string, val: string) { this.headers[name] = val; },
+    end(dataStr: string) { commandData = JSON.parse(dataStr); }
+  };
+
+  // With circuit breaker active, handleAIRequest serves the verified mock fallback
+  await handleAIRequest(forcedMockReq, forcedMockRes);
+
+  assert(
+    commandData &&
+    commandData.isSimulatedMock === true &&
+    commandData.dataClassification === 'SIMULATED' &&
+    commandData.provider === 'server-mock' &&
+    commandData.provider !== 'gemini' &&
+    commandData.missingOrUnavailableData.some((msg: string) => msg.includes('quota') || msg.includes('SIMULATED')),
+    'Test 19: Strict Non-Silent Fallback (No False Gemini Claims)',
+    `Classification: ${commandData?.dataClassification} | Provider: ${commandData?.provider} (Never falsely claims Gemini)`
+  );
+
+  // -------------------------------------------------------------
+  // Test 20: Standalone Production Server Live HTTP Integration
   // -------------------------------------------------------------
   const TEST_PORT = 5199;
   const testServer = http.createServer(async (req, res) => {
@@ -327,9 +459,10 @@ async function runVerification() {
       healthRes.status === 200 &&
       healthJson.hasSecretKeyConfigured === true &&
       cmdRes.status === 200 &&
-      cmdJson.service === 'CommandAssistant',
-      'Test 15: Standalone Production Server Live HTTP Integration',
-      `HTTP /api/ai/health: 200 OK | HTTP /api/ai/command: 200 OK (Latency: ${cmdJson.latencyMs}ms)`
+      cmdJson.service === 'CommandAssistant' &&
+      cmdJson.isSimulatedMock === true,
+      'Test 20: Standalone Production Server Live HTTP Integration',
+      `HTTP /api/ai/health: 200 OK | HTTP /api/ai/command: 200 OK (Classification: ${cmdJson.dataClassification}, Provider: ${cmdJson.provider})`
     );
   } finally {
     testServer.close();

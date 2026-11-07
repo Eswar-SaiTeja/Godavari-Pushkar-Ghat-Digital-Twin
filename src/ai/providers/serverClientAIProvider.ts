@@ -15,8 +15,14 @@ export class ServerClientAIProvider implements AIProvider {
   public readonly modelName = 'server-routed-llm';
   private baseUrl: string;
 
-  constructor(baseUrl: string = '') {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl?: string) {
+    if (baseUrl !== undefined) {
+      this.baseUrl = baseUrl;
+    } else if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_API_BASE_URL) {
+      this.baseUrl = (import.meta as any).env.VITE_API_BASE_URL;
+    } else {
+      this.baseUrl = '';
+    }
   }
 
   public async isAvailable(): Promise<boolean> {
@@ -31,9 +37,13 @@ export class ServerClientAIProvider implements AIProvider {
     }
   }
 
-  public async testConnection(): Promise<AIProviderHealth> {
+  public async testConnection(force: boolean = false): Promise<AIProviderHealth> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/ai/health`);
+      const url = `${this.baseUrl}/api/ai/health${force ? '?force=true' : ''}`;
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (force) headers['x-force-retry'] = 'true';
+
+      const res = await fetch(url, { headers });
       if (res.ok) {
         const data = await res.json();
         return {
@@ -43,9 +53,13 @@ export class ServerClientAIProvider implements AIProvider {
             ? `Google Gemini Generative AI (${data.model})` 
             : data.activeProvider === 'openai' 
             ? `OpenAI API (${data.model})` 
-            : 'Godavari Twin Mock AI Engine (Active)',
+            : 'Godavari Twin Mock AI Engine (SIMULATED)',
           model: data.model,
           message: data.message,
+          hasSecretKeyConfigured: data.hasSecretKeyConfigured,
+          quotaState: data.quotaState,
+          isSimulatedMock: data.isSimulatedMock,
+          latencyMs: data.geminiPingLatencyMs,
           availableFeatures: [
             'Command Assistant (JARVIS)',
             'Multi-Horizon Crowd Forecast (15/30/60m)',
@@ -64,6 +78,13 @@ export class ServerClientAIProvider implements AIProvider {
 
     // Gracefully fallback to mock provider health
     return mockAIProvider.testConnection();
+  }
+
+  /**
+   * Explicit manual retry button handler: forces bypassing server circuit breaker
+   */
+  public async retryConnection(): Promise<AIProviderHealth> {
+    return this.testConnection(true);
   }
 
   public async generateStructured<T>(

@@ -41,7 +41,8 @@ export class MockAIProvider implements AIProvider {
       providerName: this.name,
       model: this.modelName,
       latencyMs: latency,
-      message: 'Mock AI Engine operational. Ready for crowd forecasting, anomaly scanning, flood analysis, and SITREP generation.',
+      isSimulatedMock: true,
+      message: 'Mock AI Engine operational (SIMULATED MODE). Ready for crowd forecasting, anomaly scanning, flood analysis, and SITREP generation.',
       availableFeatures: [
         'Command Assistant',
         'Crowd Surge Prediction (30-120m)',
@@ -540,11 +541,12 @@ SDRF rescue craft and 108 ambulance units maintain active perimeter patrols. Eva
         uncertainties
       },
       timestamp: new Date().toISOString(),
-      dataClassification: 'AI_INFERRED',
+      dataClassification: 'SIMULATED',
       humanApproval: humanApprovalReq,
-      missingOrUnavailableData: missingData,
+      missingOrUnavailableData: missingData.length > 0 ? missingData : ['SIMULATED: Deterministic mock response generated for local simulation.'],
       provider: this.id,
       model: this.modelName,
+      isSimulatedMock: true,
       latencyMs: latency
     };
   }

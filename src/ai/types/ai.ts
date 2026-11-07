@@ -43,6 +43,19 @@ export interface HumanApprovalRequirement {
   details?: string;
 }
 
+export interface AIQuotaState {
+  quotaExhausted: boolean;
+  circuitBreakerActive: boolean;
+  retryDelaySeconds: number;
+  retryAfterFormatted: string;
+  resetTimestamp: string | null;
+  quotaMetric?: string;
+  quotaLimit?: number;
+  model?: string;
+  lastCheckedAt?: string;
+  source?: string;
+}
+
 export interface AIConfidence {
   score: number;                      // 0.0 - 1.0
   level: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
@@ -65,6 +78,8 @@ export interface AIStructuredResponse<T = any> {
   provider: string;
   model: string;
   latencyMs: number;
+  isSimulatedMock?: boolean;
+  quotaState?: AIQuotaState;
 }
 
 // User RBAC roles for AI Operations
@@ -105,6 +120,9 @@ export interface AIProviderHealth {
   error?: string;
   rateLimitRemaining?: number;
   rateLimitResetSeconds?: number;
+  hasSecretKeyConfigured?: boolean;
+  quotaState?: AIQuotaState;
+  isSimulatedMock?: boolean;
   availableFeatures: string[];
 }
 

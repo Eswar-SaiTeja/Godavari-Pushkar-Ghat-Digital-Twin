@@ -1062,7 +1062,9 @@ class JarvisNLEngine {
     if (typeof fetch === 'undefined') return null;
 
     try {
-      const baseUrl = typeof window !== 'undefined' ? '' : (process.env.API_BASE_URL || 'http://127.0.0.1:5173');
+      const baseUrl = typeof window !== 'undefined' 
+        ? ((typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_API_BASE_URL) || '') 
+        : (process.env.API_BASE_URL || 'http://127.0.0.1:5173');
       const contextSummary = `Live Telemetry: Devotees=${metrics.activePedestriansSimulated}; RiverGauge=${metrics.cwcWaterLevelMsl}m MSL (SAFE); Incidents=${metrics.activeSafetyAlerts}; Language=${lang}`;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 20000);
@@ -1084,6 +1086,11 @@ class JarvisNLEngine {
         const data = await res.json();
         const text = data.summary || data.payload?.directAnswer || data.payload?.summary;
         if (text) {
+          const isMock = data.provider === 'server-mock' || data.provider === 'mock' || !!data.isSimulatedMock;
+          const engineLabel = data.provider === 'gemini' 
+            ? `Google Gemini (${data.model})` 
+            : 'SIMULATED (MOCK ENGINE)';
+
           return {
             id: messageId,
             sender: 'jarvis',
@@ -1091,13 +1098,15 @@ class JarvisNLEngine {
             text,
             language: lang,
             directAnswer: text,
-            dataClassification: data.dataClassification || 'AI_INFERRED',
+            dataClassification: isMock ? 'SIMULATED' : (data.dataClassification || 'AI_INFERRED'),
             provider: data.provider,
             model: data.model,
+            isSimulatedMock: isMock,
+            quotaState: data.quotaState,
             supportingMetrics: [
               { label: 'Active Pilgrims', value: metrics.activePedestriansSimulated.toLocaleString(), variant: 'cyan' },
               { label: 'River Gauge', value: `${metrics.cwcWaterLevelMsl}m MSL`, variant: 'blue' },
-              { label: 'AI Engine', value: data.provider === 'gemini' ? `Google Gemini (${data.model})` : 'Offline Model', variant: 'purple' },
+              { label: 'AI Engine', value: engineLabel, variant: isMock ? 'amber' : 'purple' },
               { label: 'Latency', value: `${data.latencyMs || 35}ms`, variant: 'emerald' }
             ],
             suggestedNextActions: [

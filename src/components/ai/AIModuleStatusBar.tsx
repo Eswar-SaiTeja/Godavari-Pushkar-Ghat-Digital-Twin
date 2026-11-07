@@ -6,7 +6,7 @@
  * Complies with strict rule: "Do not label mock responses as live AI."
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Bot, 
   Users, 
@@ -19,8 +19,11 @@ import {
   CheckCircle2,
   Clock,
   HelpCircle,
-  AlertOctagon
+  AlertOctagon,
+  RotateCcw
 } from 'lucide-react';
+import { providerManager } from '../../ai/providers/providerManager';
+import { AIProviderHealth } from '../../ai/types/ai';
 
 export type AIModuleIntegrationStatus = 
   | 'ACTIVE' 
@@ -123,7 +126,35 @@ export const AIModuleStatusBar: React.FC<AIModuleStatusBarProps> = ({
   onSelectModule,
   activeModuleId
 }) => {
-  const getStatusBadge = (status: AIModuleIntegrationStatus) => {
+  const [providerHealth, setProviderHealth] = useState<AIProviderHealth | null>(() => providerManager.getCachedHealth());
+  const [isRetrying, setIsRetrying] = useState<boolean>(false);
+
+  useEffect(() => {
+    return providerManager.subscribe((h) => setProviderHealth(h));
+  }, []);
+
+  const handleQuickRetry = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsRetrying(true);
+    try {
+      await providerManager.retryConnection();
+    } catch (err) {
+      console.warn('[AIModuleStatusBar] Quick retry error:', err);
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  const getStatusBadge = (status: AIModuleIntegrationStatus, moduleId?: string) => {
+    if (moduleId === 'ai_copilot' && providerHealth?.quotaState?.quotaExhausted) {
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+          <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
+          QUOTA 429
+        </span>
+      );
+    }
+
     switch (status) {
       case 'ACTIVE':
         return (
@@ -165,7 +196,7 @@ export const AIModuleStatusBar: React.FC<AIModuleStatusBarProps> = ({
   return (
     <div className="bg-slate-950/90 border-b border-slate-800/80 px-3 py-2">
       {/* Top Disclosure Notice */}
-      <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1.5">
+      <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1.5 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <span className="text-cyan-400 font-bold uppercase tracking-wider text-[10px]">
             AI Sub-Systems Integration Status:
@@ -174,9 +205,26 @@ export const AIModuleStatusBar: React.FC<AIModuleStatusBarProps> = ({
             7 Active Models • 1 Heuristic Engine (DEMO MODE) • 0 Unconfigured
           </span>
         </div>
-        <div className="text-[10px] text-amber-400/90 font-medium">
-          ⚠️ Note: Heuristic and mock responses are labeled DEMO MODE; not live LLMs.
-        </div>
+        
+        {providerHealth?.quotaState?.quotaExhausted ? (
+          <div className="flex items-center gap-2 text-[10px] text-amber-300 font-medium bg-amber-950/60 px-2 py-0.5 rounded border border-amber-500/40">
+            <AlertTriangle className="w-3 h-3 text-amber-400 animate-pulse" />
+            <span>Gemini Quota 429: Active in SIMULATED Mode ({providerHealth.quotaState.retryAfterFormatted} cooldown)</span>
+            <button
+              onClick={handleQuickRetry}
+              disabled={isRetrying}
+              className="px-1.5 py-0.5 rounded bg-amber-500/30 hover:bg-amber-500/40 text-amber-200 border border-amber-500/40 text-[9px] font-bold flex items-center gap-1 disabled:opacity-50"
+              title="Force manual retry of Gemini connection"
+            >
+              <RotateCcw className={`w-2.5 h-2.5 ${isRetrying ? 'animate-spin' : ''}`} />
+              <span>{isRetrying ? 'Checking...' : 'Retry'}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="text-[10px] text-amber-400/90 font-medium">
+            ⚠️ Note: Heuristic and mock responses are labeled DEMO MODE; not live LLMs.
+          </div>
+        )}
       </div>
 
       {/* Grid of 8 Modules */}
@@ -202,7 +250,7 @@ export const AIModuleStatusBar: React.FC<AIModuleStatusBarProps> = ({
                 </span>
               </div>
               <div className="flex items-center justify-between mt-auto">
-                {getStatusBadge(mod.status)}
+                {getStatusBadge(mod.status, mod.id)}
               </div>
             </button>
           );

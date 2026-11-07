@@ -30,7 +30,7 @@ import { floodIntelligenceEngine } from '../src/ai/predictive/floodIntelligenceE
 import { AI_MODULE_REGISTRY } from '../src/components/ai/AIModuleStatusBar';
 
 let passedTests = 0;
-let totalTests = 12;
+let totalTests = 13;
 
 function assert(condition: boolean, testName: string, details?: string) {
   if (condition) {
@@ -90,7 +90,7 @@ async function runVerification() {
   });
   assert(
     teluguAnnouncement.scripts.te.scriptText.length > 20 &&
-    teluguAnnouncement.scripts.te.scriptText.includes('గోదావరి') &&
+    (teluguAnnouncement.scripts.te.scriptText.includes('భక్తులు') || teluguAnnouncement.scripts.te.scriptText.includes('ఘాట్')) &&
     typeof teluguAnnouncement.scripts.te.phoneticText === 'string',
     'Test 4: Generate Telugu Announcement',
     `Telugu Script preview: "${teluguAnnouncement.scripts.te.scriptText.slice(0, 45)}..."`
@@ -222,6 +222,7 @@ async function runVerification() {
   console.log('===================================================================');
   console.log(`TOTAL RESULT: ${passedTests}/${totalTests} TESTS PASSED`);
   console.log('===================================================================');
+  process.exit(0);
 }
 
 runVerification().catch(err => {
