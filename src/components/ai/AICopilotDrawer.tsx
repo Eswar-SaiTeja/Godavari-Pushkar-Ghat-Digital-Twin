@@ -34,7 +34,9 @@ import {
   Zap,
   Activity,
   Megaphone,
-  GitFork
+  GitFork,
+  Mic,
+  MicOff
 } from 'lucide-react';
 import { AIModuleStatusBar } from './AIModuleStatusBar';
 import { AIOperationsReportsView } from './AIOperationsReportsView';
@@ -113,6 +115,11 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   const [userRole, setUserRole] = useState<UserRole>('COMMANDER');
   const [auditLogs, setAuditLogs] = useState<AIAuditLogEntry[]>([]);
   const [activeExecutedMapAction, setActiveExecutedMapAction] = useState<string | null>(null);
+
+  // Voice Input Speech Recognition State (Phase 2)
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [speechSupported, setSpeechSupported] = useState<boolean>(false);
+  const recognitionRef = useRef<any>(null);
 
   // Day 5 AI Predictive Intelligence State
   const [crowdForecastReport, setCrowdForecastReport] = useState<CrowdPredictionForecastReport | null>(() => {
@@ -318,6 +325,51 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, isLoading]);
+
+  // Initialize Speech Recognition for Voice Input (Phase 2)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        setSpeechSupported(true);
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.onresult = (event: any) => {
+          const transcript = event.results?.[0]?.[0]?.transcript;
+          if (transcript) {
+            setPrompt(transcript);
+          }
+          setIsListening(false);
+        };
+        recognition.onerror = () => setIsListening(false);
+        recognition.onend = () => setIsListening(false);
+        recognitionRef.current = recognition;
+      }
+    }
+  }, []);
+
+  const handleToggleVoiceInput = () => {
+    if (!speechSupported || !recognitionRef.current) {
+      alert('Speech recognition is not supported in this browser. Please use Chrome/Edge or typed input.');
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      const langCode = selectedLanguage === 'te' ? 'te-IN' : selectedLanguage === 'hi' ? 'hi-IN' : 'en-IN';
+      recognitionRef.current.lang = langCode;
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (e) {
+        console.warn('Speech recognition start failed:', e);
+        setIsListening(false);
+      }
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -1701,6 +1753,19 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
             disabled={isLoading}
             className="flex-1 bg-slate-950/90 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/60 shadow-inner font-mono"
           />
+          <button
+            type="button"
+            onClick={handleToggleVoiceInput}
+            disabled={isLoading}
+            className={`p-2.5 rounded-xl border transition-all ${
+              isListening
+                ? 'bg-rose-500/20 text-rose-400 border-rose-500/50 animate-pulse'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 border-slate-800'
+            }`}
+            title={isListening ? 'Listening (Click to stop)...' : `Voice input (${selectedLanguage.toUpperCase()})`}
+          >
+            {isListening ? <MicOff className="w-4 h-4 text-rose-400" /> : <Mic className="w-4 h-4" />}
+          </button>
           <button
             type="submit"
             disabled={!prompt.trim() || isLoading}

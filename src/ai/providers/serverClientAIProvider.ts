@@ -40,21 +40,21 @@ export class ServerClientAIProvider implements AIProvider {
           connected: data.connected,
           activeProvider: data.activeProvider,
           providerName: data.activeProvider === 'gemini' 
-            ? 'Google Gemini Generative AI (Server-Verified)' 
+            ? `Google Gemini Generative AI (${data.model})` 
             : data.activeProvider === 'openai' 
-            ? 'OpenAI API (Server-Verified)' 
+            ? `OpenAI API (${data.model})` 
             : 'Godavari Twin Mock AI Engine (Active)',
           model: data.model,
           message: data.message,
           availableFeatures: [
-            'Command Assistant',
-            'Crowd Surge Prediction',
-            'Flow Stalling & Bottleneck Detection',
-            'Resource & Ambulance Dispatch Matching',
-            'Evacuation Egress Optimization',
-            'Godavari Flood Risk Intelligence',
-            'Executive Situation Reports',
-            'Bilingual PA Broadcast Scripts'
+            'Command Assistant (JARVIS)',
+            'Multi-Horizon Crowd Forecast (15/30/60m)',
+            'Bottleneck & Anomaly Detection',
+            'MCDA Resource & Ambulance Dispatch',
+            'A* Evacuation Route Optimization',
+            'Godavari Hydrology & Flood Assessment',
+            '8-Category Situation Reports (SITREP)',
+            'Multilingual PA Public Announcements'
           ]
         };
       }
@@ -77,8 +77,18 @@ export class ServerClientAIProvider implements AIProvider {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+    // Determine target endpoint based on service
+    let endpoint = '/api/ai/command';
+    if (service === 'CrowdPrediction') endpoint = '/api/ai/predict-crowd';
+    else if (service === 'AnomalyDetection') endpoint = '/api/ai/detect-anomalies';
+    else if (service === 'EvacuationOptimization') endpoint = '/api/ai/evacuation-advice';
+    else if (service === 'ResourceRecommendation') endpoint = '/api/ai/resource-allocation';
+    else if (service === 'FloodIntelligence') endpoint = '/api/ai/flood-intelligence';
+    else if (service === 'ReportGeneration') endpoint = '/api/ai/generate-report';
+    else if (service === 'PublicAnnouncement') endpoint = '/api/ai/generate-announcement';
+
     try {
-      const response = await fetch(`${this.baseUrl}/api/ai/command`, {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -104,7 +114,7 @@ export class ServerClientAIProvider implements AIProvider {
       return await response.json();
     } catch (err: any) {
       clearTimeout(timeoutId);
-      console.warn(`[ServerClientAIProvider] Request to /api/ai/command failed (${err.message}). Falling back to local Mock Provider.`);
+      console.warn(`[ServerClientAIProvider] Request to ${endpoint} failed (${err.message}). Falling back to local Mock Provider.`);
 
       // Seamless fallback to deterministic local mock provider
       const fallback = await mockAIProvider.generateStructured<T>(
